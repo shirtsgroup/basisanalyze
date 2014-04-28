@@ -208,65 +208,7 @@ class BasisVariance:
                     all_ndx_sorted[i] = int(numpy.array(range(nc.nstates))[container])
         #Reverse sequence to return a 0 -> 1 order
         return all_ndx_sorted[::-1]
-    #---------------------------------------------------------------------------------------------
 
-    def buildPerturbedExpected(self, nc, extra_R, extra_A, verbose=None):
-        #Build the expected values by the perturbed expectation, do not re-create the mbar object this time
-        #This is an incoplete method and needs some work
-        if not nc.mbar_ready:
-            nc.compute_mbar()
-        extra_count = len(extra_R)
-        """
-        Compute the expectations for the sampled states
-        Flesh out the expectations for the sampled states
-        For each new state
-        Construct its energy matrix
-        """
-        if not nc.expected_done: #Make it so I only have to calculate this once
-            #Build the ua_kln and ur_kln matrix
-            ua_kln = numpy.zeros(nc.u_kln.shape, numpy.float64) #Making 2 more expectations to find for the sake of testing optimal path creation
-            ur_kln = numpy.zeros(nc.u_kln.shape, numpy.float64)
-            nc.const_E_matrix = nc.u_kln[:,nc.real_EAR,:] - nc.u_kln[:,nc.real_AR,:]
-            nc.const_R_matrix = nc.u_kln[:,nc.real_R,:] - nc.u_kln[:,nc.real_alloff,:]
-            nc.const_A_matrix = nc.u_kln[:,nc.real_AR,:] - nc.u_kln[:,nc.real_R,:]
-            for i in range(nc.nstates):
-                ur_kln[:,i,:] = nc.const_R_matrix
-                ua_kln[:,i,:] = nc.const_A_matrix
-            (nc.Eur, nc.dEur) = nc.mbar.computeExpectations(ur_kln)
-            (nc.Eua, nc.dEua) = nc.mbar.computeExpectations(ua_kln)
-            (nc.Eur2, nc.dEur2) = nc.mbar.computeExpectations(ur_kln**2)
-            (nc.Eua2, nc.dEua2) = nc.mbar.computeExpectations(ua_kln**2)
-            (nc.Eura, nc.dEura) = nc.mbar.computeExpectations(ur_kln * ua_kln)
-            nc.var_ur = nc.Eur2 - nc.Eur**2
-            nc.var_ua = nc.Eua2 - nc.Eua**2
-            nc.expected_done = True
-        #Construct array over which to iterate u_kn_new and A_kn new
-        Eur, dEur, Eua, dEua, Eur2, dEur2, Eua2, dEua2, Eura, dEura = (numpy.zeros(nc.nstates+extra_count) for x in range(10))
-        Eur[:nc.nstates] = nc.Eur
-        Eua[:nc.nstates] = nc.Eua
-        Eur2[:nc.nstates] = nc.Eur2
-        Eua2[:nc.nstates] = nc.Eua2
-        Eura[:nc.nstates] = nc.Eura
-        dEur[:nc.nstates] = nc.dEur
-        dEua[:nc.nstates] = nc.dEua
-        dEur2[:nc.nstates] = nc.dEur2
-        dEua2[:nc.nstates] = nc.dEua2
-        dEura[:nc.nstates] = nc.dEura
-        for i in range(extra_RA_count):
-            lamR = extra_R[i]
-            lamA = extra_A[i]
-            u_kn_i = self.basis.h_r(lamR)*nc.const_R_matrix + self.basis.h_a(lamA)*nc.const_A_matrix + nc.u_kln[:,nc.real_alloff,:]
-            (Eur[nc.nstates+i], dEur[nc.nstates+i]) = nc.mbar.computePerturbedExpectation(u_kn_i, nc.const_R_matrix)
-            (Eua[nc.nstates+i], dEua[nc.nstates+i]) = nc.mbar.computePerturbedExpectation(u_kn_i, nc.const_A_matrix)
-            (Eur2[nc.nstates+i], dEur2[nc.nstates+i]) = nc.mbar.computePerturbedExpectation(u_kn_i, nc.const_R_matrix**2)
-            (Eua2[nc.nstates+i], dEua2[nc.nstates+i]) = nc.mbar.computePerturbedExpectation(u_kn_i, nc.const_A_matrix**2)
-            (Eura[nc.nstates+i], dEura[nc.nstates+i]) = nc.mbar.computePerturbedExpectation(u_kn_i, nc.const_R_matrix*nc.const_A_matrix)
-        var_ur = Eur2 - Eur**2
-        var_ua = Eua2 - Eua**2
-        dvar_ur = numpy.sqrt(dEur2**2 + 2*(Eur*dEur)**2)
-        dvar_ua = numpy.sqrt(dEua2**2 + 2*(Eua*dEua)**2)
-        expected = {'Eur':Eur, 'dEur':dEur, 'Eua':Eua, 'dEua':dEua, 'Eur2':Eur2, 'dEur2':dEur2, 'Eua2':Eua2, 'dEua2':dEua2, 'Eura':Eura, 'dEura':dEura, 'var_ur':var_ur, 'dvar_ur':dvar_ur, 'var_ua':var_ua, 'dvar_ua':dvar_ua}
-        return expected
     #---------------------------------------------------------------------------------------------
     def buildExpected_cap(self, nc, extra_states, verbose=None, bootstrap=False, basislabels=['LJ'], single_basis=None):
         extra_count = extra_states.nstates
@@ -476,6 +418,11 @@ class BasisVariance:
         return expected_values
 
     def buildExpected_master(self, nc, extra_states, verbose=None, bootstrap=False, basislabels=['e','pmes','pmesq','r','a']):
+        """
+        This particular bit of coding will be reworked in this branch to make sure that all of the possible scheudles can be handled in a general maner with minimal user input.
+        Unfortunatley, this will require reading in both the alchemy file and user input information.
+        I have removed the perturbed expected from this since it is no longer used
+        """
         if verbose is None:
             verbose=self.default_verbosity
         extra_count = extra_states.nstates
