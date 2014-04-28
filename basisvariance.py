@@ -527,43 +527,6 @@ class BasisVariance:
             const_A_matrix = (nc.u_kln[:,nc.real_AR+1,:] - nc.u_kln[:,nc.real_alloff,:] - self.basis.base_basis.h_r(nc.real_R_states[nc.real_AR+1])*const_R_matrix)/self.basis.base_basis.h_a(nc.real_A_states[nc.real_AR+1])
         else:
             const_A_matrix = nc.u_kln[:,nc.real_AR,:] - nc.u_kln[:,nc.real_R,:]
-        #Construct u_kln
-        ##Sanity check
-        #import pdb
-        ###RandAchanging = numpy.logical_and(nc.real_R_states==nc.real_A_states, nc.real_R_states < 1)
-        ###ref1 = numpy.array(range(nc.nstates))[RandAchanging][0]
-        ###ref2 = numpy.array(range(nc.nstates))[RandAchanging][1]
-        ###U1 = nc.u_kln[:,ref1,:] - nc.u_kln[:,nc.real_alloff,:]
-        ###U2 = nc.u_kln[:,ref2,:] - nc.u_kln[:,nc.real_alloff,:]
-        ###lam1 = nc.real_R_states[ref1]
-        ###lam2 = nc.real_R_states[ref2]
-        ###ha1 = self.basis.base_basis.h_a(lam1)
-        ###ha2 = self.basis.base_basis.h_a(lam2)
-        ###hr1 = self.basis.base_basis.h_r(lam1)
-        ###hr2 = self.basis.base_basis.h_r(lam2)
-        ###const_A_matrix = (U2*hr1 - hr2*U1)/(ha2*hr1 - hr2*ha1)
-        ###const_R_matrix = (U1-ha1*const_A_matrix)/hr1
-        #san_u_kln = numpy.zeros(nc.u_kln.shape)
-        ##sampledlamRA= numpy.concatenate( (numpy.array([1]*4), scipy.linspace(1,0,11)) )
-        #sampledlamRA= scipy.linspace(.9,0,10)
-        ##sampledlamE= numpy.concatenate( (scipy.linspace(1,0,5),numpy.array([0]*10)) )
-        #sampledlamE= scipy.linspace(1,0,5)
-        #pdb.set_trace()
-        #for i in range(len(sampledlamE)):
-        #    lamE = sampledlamE[i]
-        #    san_u_kln[:,i,:] = \
-        #        self.basis.base_basis.h_e(lamE)*const_E_matrix + \
-        #        (self.basis.base_basis.h_e(lamE)**2)*const_PMEsquare_matrix + \
-        #        self.basis.base_basis.h_e(lamE)*const_PMEsingle_matrix + \
-        #        nc.u_kln[:,nc.real_AR,:]
-        #for i in range(len(sampledlamRA)):
-        #    lamRA = sampledlamRA[i]
-        #    san_u_kln[:,i+len(sampledlamE),:] = \
-        #        self.basis.base_basis.h_r(lamRA)*const_R_matrix + \
-        #        self.basis.base_basis.h_a(lamRA)*const_A_matrix + \
-        #        nc.u_kln[:,nc.real_alloff,:]
-        #deltaU = nc.u_kln[:15,:15,:] - san_u_kln[:15,:15,:]
-        #pdb.set_trace()
         for i in range(extra_count):
             lamE = extra_states.E_states[i]
             lamR = extra_states.R_states[i]
@@ -693,66 +656,11 @@ class BasisVariance:
                 import numpy.linalg as linalg
                 from numpy.random import randint
                 #Select 3 states to work with
-                #NE = len(nc.real_E_states)
-                #indicies = numpy.array(range(NE))
-                #I0 = nc.real_EAR
-                #Eh0 = self.basis.h_e(nc.real_E_states[I0])
-                #Ph0 = self.basis.h_e(nc.real_E_states[I0])
-                #states = indicies[ numpy.logical_and(nc.real_E_states > 0, nc.real_E_states != 1) ]
-                #I1 = states[0]
-                #Eh1 = self.basis.h_e(nc.real_E_states[I1])
-                #Ph1 = self.basis.h_e(nc.real_E_states[I1])
-                #I2 = states[1]
-                #Eh2 = self.basis.h_e(nc.real_E_states[I2])
-                #Ph2 = self.basis.h_e(nc.real_E_states[I2])
-                #In = (I0,I1,I2)
-                #Ehn = (Eh0,Eh1,Eh2)
-                #Phn = (Ph0,Ph1,Ph2)
-                #Select 3 states to work with
                 u_kln_AR_check = numpy.zeros(nc.u_kln[:,0,:].shape)
                 NE = len(nc.real_E_states)
                 indicies = numpy.array(range(NE))
                 states = indicies[ numpy.where(nc.real_R_states == 1) ]
                 deltaUx = numpy.empty(0,numpy.float32)
-                #Linear algebra Way
-                #for x in range(len(states)):
-                #    for y in range(x+1,len(states)):
-                #        for z in range(x+y+1,len(states)):
-                #            In = states[[x,y,z]]
-                #            Eh0 = self.basis.h_e(nc.real_E_states[In[0]])
-                #            Ph0 = self.basis.h_e(nc.real_E_states[In[0]])
-                #            Eh1 = self.basis.h_e(nc.real_E_states[In[1]])
-                #            Ph1 = self.basis.h_e(nc.real_E_states[In[1]])
-                #            Eh2 = self.basis.h_e(nc.real_E_states[In[2]])
-                #            Ph2 = self.basis.h_e(nc.real_E_states[In[2]])
-                #            Ehn = (Eh0,Eh1,Eh2)
-                #            Phn = (Ph0,Ph1,Ph2)
-                #            from scipy.optimize import minimize
-                #            for k in xrange(nc.u_kln.shape[0]):
-                #                Amatrix = numpy.zeros([3,3])
-                #                Bmatrix = numpy.zeros([3,nc.u_kln.shape[2]])
-                #                for i in range(3):
-                #                    Amatrix[i,:] = [Ehn[i], Phn[i]**2, 1]
-                #                    Bmatrix[i,:] = nc.u_kln[k,In[i],:]
-                #                solution = linalg.solve(Amatrix,Bmatrix)
-                #                const_E_check[k,:] = solution[0,:] #Fold the PME solute-solvent into the E_matrix
-                #                #Leave the constPMEsingle matrix 0 so the rest of the code continues to work (it was initilized to 0 earlier)
-                #                const_PMEsquare_matrix[k,:] = solution[1,:]
-                #                u_kln_AR_check[k,:] = solution[2,:]
-                #                #Minimize way:
-                #                import pdb
-                #                pdb.set_trace()
-                #                for n in xrange(nc.u_kln.shape[2]):
-                #                    solver = lambda x: numpy.sum(numpy.array([numpy.abs(self.basis.h_e(nc.real_E_states[l])*x[0] + (self.basis.h_e(nc.real_E_states[l])**2)*x[1] + x[2] - nc.u_kln[k,l,n]) for l in xrange(len(nc.real_E_states))]))
-                #                    result = minimize(solver,numpy.array([0,0,0]))
-                #            deltaAR = numpy.zeros(u_kln_AR_check.shape)
-                #            deltaU = numpy.zeros(nc.u_kln.shape)
-                #            for k in xrange(nc.nstates):
-                #                deltaAR[k,:] = u_kln_AR_check[k,:] - nc.u_kln[k,nc.real_AR,:]
-                #            for l in xrange(len(nc.real_E_states)):
-                #                lam = nc.real_E_states[l]
-                #                deltaU[:,l,:] = numpy.abs(self.basis.h_e(lam)*const_E_check + (self.basis.h_e(lam)**2)*const_PMEsquare_matrix + u_kln_AR_check - nc.u_kln[:,l,:])
-                #            deltaUx = numpy.append(deltaUx,deltaU.max())
                 In = numpy.empty(0, numpy.int32)
                 while In.size < 3: #Loop until
                     Ip = states[randint(states.size)]
