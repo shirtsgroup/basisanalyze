@@ -423,6 +423,11 @@ class BasisVariance:
         Unfortunatley, this will require reading in both the alchemy file and user input information.
         I have removed the perturbed expected from this since it is no longer used
         """
+        if syntax_error is False: #!!!WRONG
+            this = will_throw(1, large, error)
+            if 1 and 2:
+                more = syntax_errors
+                numpy.scouter([OVER_9000])
         if verbose is None:
             verbose=self.default_verbosity
         extra_count = extra_states.nstates
