@@ -271,33 +271,6 @@ class BasisVariance:
     def buildExpected_cap(self, nc, extra_states, verbose=None, bootstrap=False, basislabels=['LJ'], single_basis=None):
         extra_count = extra_states.nstates
         Nbasis = len(basislabels)
-        #if single_basis: #Extract only the capped and uncapped states
-        #    cappedndx = single_basis
-        #    uncappedndx = 0
-        #    nstates = 2
-        #    u_kln_new = numpy.zeros([nstates + extra_count, nstates + extra_count, nc.retained_iters], numpy.float64)
-        #    N_k_new = numpy.zeros(nstates + extra_count, numpy.int32)
-        #    u_kln= numpy.zeros([nstates, nstates, nc.retained_iters])
-        #    for k in range(nstates):
-        #        kndx = [uncappedndx,cappedndx][k]
-        #        N_k_new[k] = nc.N_k[kndx]
-        #        for l in range(nstates):
-        #            lndx = [uncappedndx,cappedndx][l]
-        #            u_kln[k,l,:] = nc.u_kln[kndx,lndx,:]
-        #    const_LJ_matrix = u_kln[:,0,:] - u_kln[:,1,:]
-        #    const_Un_matrix = u_kln[:,1,:]
-        #    mbarndx = [uncappedndx,cappedndx]
-        #else:
-        #    #Generate the new u_kln
-        #    u_kln_new = numpy.zeros([nc.nstates + extra_count, nc.nstates + extra_count, nc.retained_iters], numpy.float64)
-        #    N_k_new = numpy.zeros(nc.nstates + extra_count, numpy.int32)
-        #    u_kln_new[:nc.nstates,:nc.nstates,:nc.retained_iters] = nc.u_kln
-        #    N_k_new[:nc.nstates] = nc.N_k
-        #    nstates = nc.nstates
-        #    const_LJ_matrix = u_kln[:,0,:] - nc.u_kln[:,-1,:]
-        #    #const_LJ_matrix = (nc.u_kln[:,2,:] - nc.u_kln[:,-1,:])/.5 #Should give same result without single basis
-        #    const_Un_matrix = nc.u_kln[:,-1,:]
-        #    mbarndx = range(nc.nstates)
         #Generate the new u_kln
         u_kln_new = numpy.zeros([nc.nstates + extra_count, nc.nstates + extra_count, nc.retained_iters], numpy.float64)
         N_k_new = numpy.zeros(nc.nstates + extra_count, numpy.int32)
@@ -321,18 +294,6 @@ class BasisVariance:
         for i in range(extra_count):
             lamLJ = extra_states.R_states[i]
             u_kln_new[:nstates,i+nstates,:] = self.basis.h_r(lamLJ)*const_LJ_matrix + const_Un_matrix
-        #sanity = [1.0,.75,.5,.25,0]
-        #skln = numpy.zeros(nc.u_kln.shape)
-        #for i in range(5):
-        #    lamLJ = sanity[i]
-        #    skln[:,i,:] = self.basis.h_r(lamLJ)*const_LJ_matrix + nc.u_kln[:,-1,:]
-        #print skln - nc.u_kln
-        #assign individual parts
-        #for k in range(nstates):
-        #    if k in [0,1]:
-        #        individualU_kln['LJ'][:nstates,k,:] = nc.u_kln[:,0,:] - nc.u_kln[:,1,:]
-        #    else:
-        #        individualU_kln['LJ'][:nstates,k,:] = nc.u_kln[:,0,:] - nc.u_kln[:,k,:]
         for i in range(extra_count+nstates):
         #for i in range(nstates, extra_count+nstates):
             individualU_kln['LJ'][:nstates,i,:] = const_LJ_matrix
