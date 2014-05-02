@@ -428,6 +428,7 @@ class BasisVariance:
             expected_values['dEu'+label] = dEui
             expected_values['Eu'+label + '2'] = Eui2
             expected_values['dEu'+label + '2'] = dEui2
+            #Some comment I dont want to commit
             for j in range(i+1,Nbasis): #Compute the cross terms, no need to run i=j since that was handled above
                 crosslabel = basislabels[j]
                 (Eu_ij, dEu_ij) = mbar.computeExpectations(individualU_kln[label] * individualU_kln[crosslabel])
