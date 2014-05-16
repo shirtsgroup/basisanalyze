@@ -573,6 +573,20 @@ class ncdata:
         return state_index
         #Remove states where all other basis functions are not 0
 
+    def logical_all_and(*args):
+        #Funciton to do a full logical and on all arguments, effectivley overload numpy.logical_and
+        #Accepts a full sequence of numpy Truth arguments of the same size and does logical_and on all of them together
+        nargs = len(args)
+        #Check the arguments
+        for arg in args:
+            if arg.dtype != bool:
+                raise TypeError('Arguments must all be bool Numpy arrays!')
+        all_and = args[0]
+        #loop over every argument and cascade
+        for iarg in xrange(1,nargs):
+           all_and = numpy.logical_and(all_and, args[iarg])
+        return all_and
+
     def _AutoAlchemyStates(self, phase, real_R_states=None, real_A_states=None, real_E_states=None, real_C_states=None, alchemy_source=None):
         #Generate the real alchemical states automatically.
         if alchemy_source: #Load alchemy from an external source
@@ -635,74 +649,58 @@ class ncdata:
         self.real_A_states = numpy.array(real_A_states)
         self.real_C_states = numpy.array(real_C_states)
         indicies = numpy.array(range(len(real_E_states)))
+        #Determine coupled and decoupled, Inversion not coded yet
+        labels = ['R','A','E','C','P']
+        basis = {'R':real_R_states, 'A':real_A_states, 'E':real_E_states, 'C':real_C_states, 'P':real_PMEFull_states}
+        coupled = {}
+        decoupled = {}
+        for label in labels:
+            coupled[label] = basis[label] == 1
+            decoupled[label] = basis[label] == 0
         #Determine Inversion
         if numpy.any(self.real_E_states < 0) or numpy.any(numpy.logical_and(self.real_PMEFull_states < 0,numpy.array([i is not None for i in self.real_PMEFull_states]))):
             self.Inversion = True
         else:
             self.Inversion = False
         #Set the indicies, trap TypeError (logical_and false everywhere) as None (i.e. state not found in alchemy)
-        if crunchC: #Check for the cap potential
-            print "Not Coded Yet!"
-            exit(1)
-            #Create the Combinations
-            basisVars = ["E", "A", "R", "C"]
-            mappedStates = [self.real_E_states, self.real_R_states, self.real_C_states, self.real_A_states]
-            nBasis = len(basisVars)
-            coupled_states = {}
-            decoupled_states = {}
-            for iBasis in xrange(nBasis):
-                coupled_states[basisVars[iBasis]] = numpy.where(mappedStates[iBasis] == 1.00)[0] #need the [0] to extract the array from the basis
-                decoupled_states[basisVars[iBasis]] = numpy.where(mappedStates[iBasis] == 0.00)[0]
-            self.coupled_states = coupled_states
-            self.decoupled_states = decoupled_states
-            self.basisVars = basisVars
+        #Conditions to check for: EPCAR, PCAR, CAR, AR, R, CR, alloff, Psolve
+        if self.PME_isolated: #Logic to solve for isolated PME case
+            try: #Figure out the Fully coupled state, EPCAR
+                self.real_EPCAR = int(indicies[logical_all_and(coupled['E'], coupled['P'], coupled['C'], coupled['A'], coupled['R'])
+            except TypeError:
+                self.real_EPCAR = None
+            try: # PCAR
+                self.real_PCAR = int(indicies[logical_all_and(decoupled['E'], coupled['P'], coupled['C'], coupled['A'], coupled['R'])
+            except TypeError:
+                self.real_PCAR = None
+            try: # CAR
+                self.real_CAR = int(indicies[logical_all_and(decoupled['E'], decoupled['P'], coupled['C'], coupled['A'], coupled['R'])
+            except TypeError:
+                self.real_CAR = None
+            try: # AR
+                self.real_AR = int(indicies[logical_all_and(decoupled['E'], decoupled['P'], decoupled['C'], coupled['A'], coupled['R'])
+            except TypeError:
+                self.real_AR = None
+            try: # R
+                self.real_R = int(indicies[logical_all_and(decoupled['E'], decoupled['P'], decoupled['C'], decoupled['A'], coupled['R'])
+            except TypeError:
+                self.real_R = None
+            try: # CR
+                self.real_CR = int(indicies[logical_all_and(decoupled['E'], decoupled['P'], decoupled['C'], coupled['A'], decoupled['R'])
+            except TypeError:
+                self.real_CR = None
+            try: # alloff
+                self.real_alloff = int(indicies[logical_all_and(decoupled['E'], decoupled['P'], decoupled['C'], decoupled['A'], decoupled['R'])
+            except TypeError:
+                self.real_alloff = None
+            try: # Psolve
+                #Where E is off, ARC are coupled, and P is not (0 or 1)
+                self.real_Psolve = int(indicies[logical_all_and(decoupled['E'], numpy.inverse(coupled['P']), numpy.inverse(decoupled['P']), coupled['C'], coupled['A'], coupled['R'])
+            except TypeError:
+                self.real_Psolve = None
         else:
-            if self.PME_isolated: #Logic to solve for isolated PME case
-                try: #Figure out the Fully coupled state
-                    self.real_EAR = int(indicies[ numpy.logical_and(numpy.logical_and(self.real_E_states == 1, self.real_PMEFull_states == 1), numpy.logical_and(self.real_R_states == 1, self.real_A_states == 1)) ])
-                except TypeError:
-                    self.real_EAR = None
-                try:
-                    self.real_AR = int(indicies[ numpy.logical_and(numpy.logical_and(self.real_E_states == 0, self.real_PMEFull_states == 0), numpy.logical_and(self.real_R_states == 1, self.real_A_states == 1)) ])
-                except TypeError:
-                    self.real_AR = None
-                try:
-                    self.real_R = int(indicies[ numpy.logical_and(numpy.logical_and(self.real_E_states == 0, self.real_PMEFull_states == 0), numpy.logical_and(self.real_R_states == 1, self.real_A_states == 0)) ])
-                except TypeError:
-                    self.real_R = None
-                try:
-                    self.real_alloff = int(indicies[ numpy.logical_and(numpy.logical_and(self.real_E_states == 0, self.real_PMEFull_states == 0), numpy.logical_and(self.real_R_states == 0, self.real_A_states == 0)) ])
-                except:
-                    self.real_alloff = None
-                try:
-                    self.real_PMEAR = int(indicies[ numpy.logical_and(numpy.logical_and(self.real_E_states == 0, self.real_PMEFull_states == 1), numpy.logical_and(self.real_R_states == 1, self.real_A_states == 1)) ])
-                except TypeError:
-                    self.real_PMEAR = None
-                try:
-                    self.real_PMEsolve = int(indicies[ numpy.logical_and(numpy.logical_and(self.real_E_states == 0, numpy.logical_and(self.real_PMEFull_states != 1, self.real_PMEFull_states != 0)), numpy.logical_and(self.real_R_states == 1, self.real_A_states == 1)) ])
-                except TypeError:
-                    self.real_PMEsolve = None
-                if self.Inversion:
-                    self.real_inverse = int(indicies[ numpy.logical_and(numpy.logical_and(numpy.logical_and(self.real_E_states == -1, self.real_PMEFull_states == -1), self.real_R_states == 1), self.real_A_states==1) ])
-            else:
-                try:
-                    self.real_EAR = int(indicies[ numpy.logical_and(self.real_E_states == 1, numpy.logical_and(self.real_R_states == 1, self.real_A_states == 1)) ])
-                except TypeError:
-                    self.real_EAR = None
-                try:
-                    self.real_AR = int(indicies[ numpy.logical_and(self.real_E_states == 0, numpy.logical_and(self.real_R_states == 1, self.real_A_states == 1)) ])
-                except TypeError:
-                    self.real_AR = None
-                try:
-                    self.real_R = int(indicies[ numpy.logical_and(self.real_E_states == 0, numpy.logical_and(self.real_R_states == 1, self.real_A_states == 0)) ])
-                except TypeError:
-                    self.real_R = None
-                try:
-                    self.real_alloff = int(indicies[ numpy.logical_and(self.real_E_states == 0, numpy.logical_and(self.real_R_states == 0, self.real_A_states == 0)) ])
-                except:
-                    self.real_alloff = None
-                if self.Inversion:
-                    self.real_inverse = int(indicies[ numpy.logical_and(numpy.logical_and(self.real_E_states == -1, self.real_R_states == 1), self.real_A_states==1) ])
+            raise Exception('Need to have an isolated PME state')
+            sys.exit(1)
         #Now that all the sorting and variable assignment has been done, must set the PME states which were not defined to the electrostatic state as thats how its coded (helps sorting algorithm later)
         #This algorighm also ensures that real_PMEFull_states is not dtype=object
         nstates = len(self.real_E_states)
@@ -719,12 +717,12 @@ class ncdata:
         self.mbar = MBAR(self.u_kln, self.N_k, verbose = self.verbose, method = 'adaptive')
         self.mbar_ready = True
 
-    def __init__(self, phase, source_directory, verbose=False, real_R_states = None, real_A_states = None, real_E_states = None, compute_mbar = False, alchemy_source = None, save_equil_data=False, save_prefix="", run_checks=False, nequil=None, manual_subsample=False, u_kln_input=None, temp_in=298):
+    def __init__(self, phase, source_directory, verbose=False, real_R_states = None, real_A_states = None, real_E_states = None, real_C_states = None, compute_mbar = False, alchemy_source = None, save_equil_data=False, save_prefix="", run_checks=False, nequil=None, manual_subsample=False, u_kln_input=None, temp_in=298):
         self.phase = phase
         self.verbose = verbose
         if type(save_prefix) is not str: save_prefix = ""
         self.save_prefix = save_prefix
-        self._AutoAlchemyStates(self.phase, real_R_states=real_R_states, real_A_states=real_A_states, real_E_states=real_E_states, alchemy_source=alchemy_source)
+        self._AutoAlchemyStates(self.phase, real_R_states=real_R_states, real_A_states=real_A_states, real_E_states=real_E_states, real_C_states=real_C_states, alchemy_source=alchemy_source)
         if real_R_states:
             self.real_R_states = numpy.array(real_R_states)
         self.real_R_count = len(self.real_R_states)
