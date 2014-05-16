@@ -417,7 +417,19 @@ class BasisVariance:
         expected_values['sorting_items'] = [i for i in expected_values.keys() if i not in exclude_from_sorting]
         return expected_values
 
-    def buildExpected_master(self, nc, extra_states, verbose=None, bootstrap=False, basislabels=['e','pmes','pmesq','r','a']):
+    def const_constructor(self, nc, sequence):
+        """
+        Compute the constant matricies for each of the following sequences based on the ncdata
+        """
+        valid_seqs = [ ['EP', 'C', 'AR'], ['EPA', 'C', 'R'], ['EP', 'A', 'C', 'R'], ['A', 'EP', 'C', 'R'] ]
+        if sequnce not in valid_seqs:
+            print "Only list of valid sequnces are:"
+            print valid_seqs
+            sys.exit(1)
+        if sequnce is valid_seqs[0]:
+            PMEFull
+        return const_R_matrix, const_A_matrix, const_C_matrix, const_E_matrix, const_PMEsquare_matrix, const_PMEsingle_matrix    
+    def buildExpected_master(self, nc, extra_states, verbose=None, bootstrap=False, basislabels=['E','P','PS','C','R','A']):
         """
         This particular bit of coding will be reworked in this branch to make sure that all of the possible scheudles can be handled in a general maner with minimal user input.
         Unfortunatley, this will require reading in both the alchemy file and user input information.
@@ -441,7 +453,7 @@ class BasisVariance:
         #Solve for each basis function.
         if nc.PME_isolated:
             if nc.real_PMEAR:
-                PMEFull = nc.u_kln[:,nc.real_PMEAR,:] - nc.u_kln[:,nc.real_AR,:]
+                PMEFull = nc.u_kln[:,nc.real_PMEAR,:] - nc.u_kln[:,nc.real_CAR,:]
                 PMELess = nc.u_kln[:,nc.real_PMEsolve,:] - nc.u_kln[:,nc.real_AR,:]
                 try:
                     multi_lam = self.basis.multiple_lam
@@ -631,145 +643,6 @@ class BasisVariance:
                 hfull = self.basis.h_e(LamAtFull)
                 const_PMEsquare_matrix = (PMELess/hless - PMEFull/hfull) / (hless-hfull)
                 const_PMEsingle_matrix = PMEFull/hfull - hfull*const_PMEsquare_matrix
-            else: #Calculate by hand
-                import pdb
-                #This logic uses the const_E_matrix as a check later on
-                const_PMEsingle_matrix = numpy.zeros(nc.u_kln[:,0,:].shape)
-                const_PMEsquare_matrix = numpy.zeros(nc.u_kln[:,0,:].shape)
-                const_E_check = numpy.zeros(nc.u_kln[:,0,:].shape)
-                import numpy.linalg as linalg
-                from numpy.random import randint
-                #Select 3 states to work with
-                #NE = len(nc.real_E_states)
-                #indicies = numpy.array(range(NE))
-                #I0 = nc.real_EAR
-                #Eh0 = self.basis.h_e(nc.real_E_states[I0])
-                #Ph0 = self.basis.h_e(nc.real_E_states[I0])
-                #states = indicies[ numpy.logical_and(nc.real_E_states > 0, nc.real_E_states != 1) ]
-                #I1 = states[0]
-                #Eh1 = self.basis.h_e(nc.real_E_states[I1])
-                #Ph1 = self.basis.h_e(nc.real_E_states[I1])
-                #I2 = states[1]
-                #Eh2 = self.basis.h_e(nc.real_E_states[I2])
-                #Ph2 = self.basis.h_e(nc.real_E_states[I2])
-                #In = (I0,I1,I2)
-                #Ehn = (Eh0,Eh1,Eh2)
-                #Phn = (Ph0,Ph1,Ph2)
-                #Select 3 states to work with
-                u_kln_AR_check = numpy.zeros(nc.u_kln[:,0,:].shape)
-                NE = len(nc.real_E_states)
-                indicies = numpy.array(range(NE))
-                states = indicies[ numpy.where(nc.real_R_states == 1) ]
-                deltaUx = numpy.empty(0,numpy.float32)
-                #Linear algebra Way
-                #for x in range(len(states)):
-                #    for y in range(x+1,len(states)):
-                #        for z in range(x+y+1,len(states)):
-                #            In = states[[x,y,z]]
-                #            Eh0 = self.basis.h_e(nc.real_E_states[In[0]])
-                #            Ph0 = self.basis.h_e(nc.real_E_states[In[0]])
-                #            Eh1 = self.basis.h_e(nc.real_E_states[In[1]])
-                #            Ph1 = self.basis.h_e(nc.real_E_states[In[1]])
-                #            Eh2 = self.basis.h_e(nc.real_E_states[In[2]])
-                #            Ph2 = self.basis.h_e(nc.real_E_states[In[2]])
-                #            Ehn = (Eh0,Eh1,Eh2)
-                #            Phn = (Ph0,Ph1,Ph2)
-                #            from scipy.optimize import minimize
-                #            for k in xrange(nc.u_kln.shape[0]):
-                #                Amatrix = numpy.zeros([3,3])
-                #                Bmatrix = numpy.zeros([3,nc.u_kln.shape[2]])
-                #                for i in range(3):
-                #                    Amatrix[i,:] = [Ehn[i], Phn[i]**2, 1]
-                #                    Bmatrix[i,:] = nc.u_kln[k,In[i],:]
-                #                solution = linalg.solve(Amatrix,Bmatrix)
-                #                const_E_check[k,:] = solution[0,:] #Fold the PME solute-solvent into the E_matrix
-                #                #Leave the constPMEsingle matrix 0 so the rest of the code continues to work (it was initilized to 0 earlier)
-                #                const_PMEsquare_matrix[k,:] = solution[1,:]
-                #                u_kln_AR_check[k,:] = solution[2,:]
-                #                #Minimize way:
-                #                import pdb
-                #                pdb.set_trace()
-                #                for n in xrange(nc.u_kln.shape[2]):
-                #                    solver = lambda x: numpy.sum(numpy.array([numpy.abs(self.basis.h_e(nc.real_E_states[l])*x[0] + (self.basis.h_e(nc.real_E_states[l])**2)*x[1] + x[2] - nc.u_kln[k,l,n]) for l in xrange(len(nc.real_E_states))]))
-                #                    result = minimize(solver,numpy.array([0,0,0]))
-                #            deltaAR = numpy.zeros(u_kln_AR_check.shape)
-                #            deltaU = numpy.zeros(nc.u_kln.shape)
-                #            for k in xrange(nc.nstates):
-                #                deltaAR[k,:] = u_kln_AR_check[k,:] - nc.u_kln[k,nc.real_AR,:]
-                #            for l in xrange(len(nc.real_E_states)):
-                #                lam = nc.real_E_states[l]
-                #                deltaU[:,l,:] = numpy.abs(self.basis.h_e(lam)*const_E_check + (self.basis.h_e(lam)**2)*const_PMEsquare_matrix + u_kln_AR_check - nc.u_kln[:,l,:])
-                #            deltaUx = numpy.append(deltaUx,deltaU.max())
-                In = numpy.empty(0, numpy.int32)
-                while In.size < 3: #Loop until
-                    Ip = states[randint(states.size)]
-                    if not Ip in In and nc.real_E_states[Ip]!=0:
-                        In = numpy.append(In,Ip)
-                Eh0 = self.basis.h_e(nc.real_E_states[In[0]])
-                Ph0 = self.basis.h_e(nc.real_E_states[In[0]])
-                Eh1 = self.basis.h_e(nc.real_E_states[In[1]])
-                Ph1 = self.basis.h_e(nc.real_E_states[In[1]])
-                Eh2 = self.basis.h_e(nc.real_E_states[In[2]])
-                Ph2 = self.basis.h_e(nc.real_E_states[In[2]])
-                Ehn = (Eh0,Eh1,Eh2)
-                Phn = (Ph0,Ph1,Ph2)
-                                
-                #Solve the lienar algebra system TODO: Find a way to avoid iterating over each dimension
-                check_singular_matrix = numpy.array([[Ehn[i], Phn[i], Phn[i]**2] for i in range(3)])
-                if numpy.allclose(linalg.det(check_singular_matrix),0): #Singular matrix, ignore last state since we cant isolate solute-solvent short-range and pme. Have to use the allclose to trap det=1E-17 entries
-                    for k in xrange(nc.u_kln.shape[0]):
-                        Amatrix = numpy.zeros([2,2])
-                        Bmatrix = numpy.zeros([2,nc.u_kln.shape[2]])
-                        for i in range(2):
-                            Amatrix[i,:] = [Ehn[i], Phn[i]**2]
-                            Bmatrix[i,:] = nc.u_kln[k,In[i],:] - nc.u_kln[k,nc.real_AR,:]
-                        
-                        solution = linalg.solve(Amatrix,Bmatrix)
-                        const_E_check[k,:] = solution[0,:] #Fold the PME solute-solvent into the E_matrix
-                        #Leave the constPMEsingle matrix 0 so the rest of the code continues to work (it was initilized to 0 earlier)
-                        const_PMEsquare_matrix[k,:] = solution[1,:]
-                else:
-                    for k in xrange(nc.u_kln.shape[0]):
-                        Amatrix = numpy.zeros([3,3])
-                        Bmatrix = numpy.zeros([3,nc.u_kln.shape[2]])
-                        for i in range(3):
-                            Amatrix[i,:] = [Ehn[i], Phn[i], Phn[i]**2]
-                            Bmatrix[i,:] = nc.u_kln[k,In[i],:] - nc.u_kln[k,nc.real_AR,:]
-                        solution = linalg.solve(Amatrix,Bmatrix[:,0])
-                        const_E_check[k,:] = solution[0,:]
-                        const_PMEsingle_matrix[k,:] = solution[1,:]
-                        const_PMEsquare_matrix[k,:] = solution[2,:]
-        else: #No PME isolated, must still solve for the h^2 interactions
-            const_PMEsquare_matrix = numpy.zeros(nc.u_kln[:,0,:].shape)
-            const_PMEsingle_matrix = 0 #This is now zero since it will be folded into the single E terms
-            const_E_check = numpy.zeros(nc.u_kln[:,0,:].shape)
-            import numpy.linalg as linalg
-            from numpy.random import randint
-            NE = len(nc.real_E_states)
-            indicies = numpy.array(range(NE))
-            states = indicies[ numpy.where(nc.real_R_states == 1) ]
-            In = numpy.empty(0, numpy.int32)
-            while In.size < 2: #Loop until
-                Ip = states[randint(states.size)]
-                if not Ip in In and nc.real_E_states[Ip]!=0:
-                    In = numpy.append(In,Ip)
-            Eh0 = self.basis.h_e(nc.real_E_states[In[0]])
-            Ph0 = self.basis.h_e(nc.real_E_states[In[0]])
-            Eh1 = self.basis.h_e(nc.real_E_states[In[1]])
-            Ph1 = self.basis.h_e(nc.real_E_states[In[1]])
-            Ehn = (Eh0,Eh1)
-            Phn = (Ph0,Ph1)
-            #Solve the lienar algebra system TODO: Find a way to avoid iterating over each dimension
-            for k in xrange(nc.u_kln.shape[0]):
-                Amatrix = numpy.zeros([2,2])
-                Bmatrix = numpy.zeros([2,nc.u_kln.shape[2]])
-                for i in range(2):
-                    Amatrix[i,:] = [Ehn[i], Phn[i]**2]
-                    Bmatrix[i,:] = nc.u_kln[k,In[i],:] - nc.u_kln[k,nc.real_AR,:]
-                solution = linalg.solve(Amatrix,Bmatrix)
-                const_E_check[k,:] = solution[0,:] #Fold the PME solute-solvent into the E_matrix
-                #Leave the constPMEsingle matrix 0 so the rest of the code continues to work (it was initilized to 0 earlier)
-                const_PMEsquare_matrix[k,:] = solution[1,:]
         const_E_matrix = nc.u_kln[:,nc.real_EAR,:] - nc.u_kln[:,nc.real_AR,:] - const_PMEsingle_matrix - const_PMEsquare_matrix
         try: #Sanity check 
             nc.real_PMEAR #Variable exists
