@@ -416,6 +416,21 @@ class BasisVariance:
                 expected_values['dEu' + label + '_' + crosslabel] = dEu_ij
         expected_values['sorting_items'] = [i for i in expected_values.keys() if i not in exclude_from_sorting]
         return expected_values
+    
+    def potential_eval(self, lam, switches, bases):
+        """
+        Compute the energy given a set of switches and consstant basis over a lam range
+        This is designed to evaluate the energies from different sectional free energies
+        I may not really use this, but im writing it right now
+        """
+        nterms = len(switches)
+        nlam = len(lam)
+        bshape = bases[0].shape()[0] #Should be 2d once i extract it from the tuple
+        potential = numpy.zeros([bshape[0], nlam, bshape[1])
+        for ilam in xrange(nlam):
+            for iterm in xrange(nterms):
+                potential[:,ilam,:] += switches[iterm](lam(ilam))*bases[iterm]
+        return potential
 
     def const_constructor(self, nc, sequence):
         """
@@ -429,6 +444,7 @@ class BasisVariance:
         if sequnce is valid_seqs[0]:
             PMEFull
         return const_R_matrix, const_A_matrix, const_C_matrix, const_E_matrix, const_PMEsquare_matrix, const_PMEsingle_matrix    
+
     def buildExpected_master(self, nc, extra_states, verbose=None, bootstrap=False, basislabels=['E','P','PS','C','R','A']):
         """
         This particular bit of coding will be reworked in this branch to make sure that all of the possible scheudles can be handled in a general maner with minimal user input.
