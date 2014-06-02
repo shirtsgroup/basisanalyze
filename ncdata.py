@@ -665,31 +665,43 @@ class ncdata:
         #Set the indicies, trap TypeError (logical_and false everywhere) as None (i.e. state not found in alchemy)
         #Conditions to check for: EPCAR, PCAR, CAR, AR, R, CR, alloff, Psolve
         if self.PME_isolated: #Logic to solve for isolated PME case
-            try: #Figure out the Fully coupled state, EPCAR
+            #Figure out the Fully coupled state, EPCAR
+            try:
                 self.real_EPCAR = int(indicies[logical_all_and(coupled['E'], coupled['P'], coupled['C'], coupled['A'], coupled['R'])
             except TypeError:
                 self.real_EPCAR = None
-            try: # PCAR
+            #PCAR
+            try:
                 self.real_PCAR = int(indicies[logical_all_and(decoupled['E'], coupled['P'], coupled['C'], coupled['A'], coupled['R'])
             except TypeError:
                 self.real_PCAR = None
-            try: # CAR
+            #EPCR, needed in a particular sequence
+            try:
+                self.real_EPCR = int(indicies[logical_all_and(coupled['E'], coupled['P'], coupled['C'], decoupled['A'], coupled['R'])
+            except TypeError:
+                self.real_EPCR = None
+            #CAR
+            try:
                 self.real_CAR = int(indicies[logical_all_and(decoupled['E'], decoupled['P'], coupled['C'], coupled['A'], coupled['R'])
             except TypeError:
                 self.real_CAR = None
-            try: # AR
+            #AR
+            try:
                 self.real_AR = int(indicies[logical_all_and(decoupled['E'], decoupled['P'], decoupled['C'], coupled['A'], coupled['R'])
             except TypeError:
                 self.real_AR = None
-            try: # R
+            #R
+            try:
                 self.real_R = int(indicies[logical_all_and(decoupled['E'], decoupled['P'], decoupled['C'], decoupled['A'], coupled['R'])
             except TypeError:
                 self.real_R = None
-            try: # CR
+            #CR
+            try:
                 self.real_CR = int(indicies[logical_all_and(decoupled['E'], decoupled['P'], decoupled['C'], coupled['A'], decoupled['R'])
             except TypeError:
                 self.real_CR = None
-            try: # alloff
+            #Alloff
+            try:
                 self.real_alloff = int(indicies[logical_all_and(decoupled['E'], decoupled['P'], decoupled['C'], decoupled['A'], decoupled['R'])
             except TypeError:
                 self.real_alloff = None

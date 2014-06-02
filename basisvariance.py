@@ -417,22 +417,7 @@ class BasisVariance:
         expected_values['sorting_items'] = [i for i in expected_values.keys() if i not in exclude_from_sorting]
         return expected_values
     
-    def potential_eval(self, lam, switches, bases):
-        """
-        Compute the energy given a set of switches and consstant basis over a lam range
-        This is designed to evaluate the energies from different sectional free energies
-        I may not really use this, but im writing it right now
-        """
-        nterms = len(switches)
-        nlam = len(lam)
-        bshape = bases[0].shape()[0] #Should be 2d once i extract it from the tuple
-        potential = numpy.zeros([bshape[0], nlam, bshape[1])
-        for ilam in xrange(nlam):
-            for iterm in xrange(nterms):
-                potential[:,ilam,:] += switches[iterm](lam(ilam))*bases[iterm]
-        return potential
-
-    def const_constructor(self, nc, sequence):
+    def check_stage(self, sequence):
         """
         Compute the constant matricies for each of the following sequences based on the ncdata
         """
@@ -441,11 +426,34 @@ class BasisVariance:
             print "Only list of valid sequnces are:"
             print valid_seqs
             sys.exit(1)
-        if sequnce is valid_seqs[0]:
-            PMEFull
-        return const_R_matrix, const_A_matrix, const_C_matrix, const_E_matrix, const_PMEsquare_matrix, const_PMEsingle_matrix    
+        return 
+    
+    def Ugen_EP_C_AR(self, nc)
+        const_R_matrix = nc.u_kln[:,nc.real_R,:] - nc.u_kln[:,nc.real_alloff,:]
+        const_A_matrix = nc.u_kln[:,nc.real_AR,:] - nc.u_kln[:,nc.real_R,:]
+        const_C_matrix = nc.u_kln[:,nc.real_CAR,:] - nc.u_kln[:,nc.real_AR,:]
+        const_E_matrix = nc.u_kln[:,nc.real_EPCAR,:] - nc.u_kln[:,nc.real_PCAR,:]
+        return const_R_matix, const_A_matrix, const_C_matrix, const_E_matrix
+    def Ugen_EPA_C_R(self, nc)
+        const_R_matrix = nc.u_kln[:,nc.real_R,:] - nc.u_kln[:,nc.real_alloff,:]
+        const_C_matrix = nc.u_kln[:,nc.real_CR,:] - nc.u_kln[:,nc.real_R,:]
+        const_A_matrix = nc.u_kln[:,nc.real_CAR,:] - nc.u_kln[:,nc.real_CR,:]
+        const_E_matrix = nc.u_kln[:,nc.real_EPCAR,:] - nc.u_kln[:,nc.real_PCAR,:]
+        return const_R_matix, const_A_matrix, const_C_matrix, const_E_matrix
+    def Ugen_EP_A_C_R(self, nc)
+        const_R_matrix = nc.u_kln[:,nc.real_R,:] - nc.u_kln[:,nc.real_alloff,:]
+        const_C_matrix = nc.u_kln[:,nc.real_CR,:] - nc.u_kln[:,nc.real_R,:]
+        const_A_matrix = nc.u_kln[:,nc.real_CAR,:] - nc.u_kln[:,nc.real_CR,:]
+        const_E_matrix = nc.u_kln[:,nc.real_EPCAR,:] - nc.u_kln[:,nc.real_PCAR,:]
+        return const_R_matix, const_A_matrix, const_C_matrix, const_E_matrix
+    def Ugen_A_EP_C_R(self, nc)
+        const_R_matrix = nc.u_kln[:,nc.real_R,:] - nc.u_kln[:,nc.real_alloff,:]
+        const_C_matrix = nc.u_kln[:,nc.real_CR,:] - nc.u_kln[:,nc.real_R,:]
+        const_E_matrix = nc.u_kln[:,nc.real_EPCR,:] - nc.u_kln[:,nc.real_PCR,:]
+        const_A_matrix = nc.u_kln[:,nc.real_EPCAR,:] - nc.u_kln[:,nc.real_EPCR,:]
+        return const_R_matix, const_A_matrix, const_C_matrix, const_E_matrix
 
-    def buildExpected_master(self, nc, extra_states, verbose=None, bootstrap=False, basislabels=['E','P','PS','C','R','A']):
+    def buildExpected_master(self, nc, extra_states, sequence, verbose=None, bootstrap=False, basislabels=['E','P','PS','C','R','A']):
         """
         This particular bit of coding will be reworked in this branch to make sure that all of the possible scheudles can be handled in a general maner with minimal user input.
         Unfortunatley, this will require reading in both the alchemy file and user input information.
@@ -453,6 +461,76 @@ class BasisVariance:
         """
         if verbose is None:
             verbose=self.default_verbosity
+        #Validate the sequence
+        valid_seqs = [ ['EP', 'C', 'AR'], ['EPA', 'C', 'R'], ['EP', 'A', 'C', 'R'], ['A', 'EP', 'C', 'R'] ]
+        if sequnce not in valid_seqs:
+            print "Only list of valid sequnces are:"
+            print valid_seqs
+            sys.exit(1)
+        nstage = len(sequence)
+        #Compute the constant matricies
+        #Start with alloff
+        const_U_matrix = nc.u_kln[:,nc.real_alloff,:]
+        #Compute PME
+        PMEFull = nc.u_kln[:,nc.real_PCAR,:] - nc.u_kln[:,nc.real_CAR,:]
+        PMELess = nc.u_kln[:,nc.real_Psolve,:] - nc.u_kln[:,nc.real_CAR,:]
+        LamAtFull = nc.real_PMEFull_states[nc.real_PCAR]
+        LamAtLess = nc.real_PMEFull_states[nc.real_Psolve]
+        hless = self.basis.h_e(LamAtLess)
+        hfull = self.basis.h_e(LamAtFull)
+        const_P2_matrix = (PMELess/hless - PMEFull/hfull) / (hless-hfull)
+        const_P_matrix = PMEFull/hfull - hfull*const_PMEsquare_matrix
+        #Compute the rest of the basis based on sequence
+        if sequence is valid_seqs[0] #ep c ar
+            const_R_matix, const_A_matrix, const_C_matrix, const_E_matrix = self.Ugen_EP_C_AR(nc)
+            #Assign energy evaluation stages
+            Ustage = [
+                lambda lam: self.basis.h_e(lam)*const_E_matrix + \
+                            (self.basis.h_e(lam)**2)*const_P2_matrix + \
+                            self.basis.h_e(lam)*const_P_matrix + \
+                            nc.u_kln[:,nc.real_CAR,:],
+                lambda lam: lam * const_C_matrix + \
+                            nc.u_kln[:,nc.real_AR,:],
+                lambda lam: self.basis.h_r(lam)*const_R_matrix + \
+                            self.basis.h_a(lam)*const_A_matrix + \
+                            nc.u_kln[:,nc.real_alloff,:]
+                     ]
+        elif sequence is valid_seqs[1]: #epa, c, r
+            const_R_matix, const_A_matrix, const_C_matrix, const_E_matrix = self.Ugen_EPA_C_R(nc)
+            Ustage = [
+                lambda lam: self.basis.h_e(lam)*const_E_matrix + \
+                            (self.basis.h_e(lam)**2)*const_P2_matrix + \
+                            self.basis.h_e(lam)*const_P_matrix + \
+                            self.basis.h_a(lam)*const_A_matrix + \
+                            nc.u_kln[:,nc.real_CR,:],
+                lambda lam: lam * const_C_matrix + \
+                            nc.u_kln[:,nc.real_R,:],
+                lambda lam: self.basis.h_r(lam)*const_R_matrix + \
+                            nc.u_kln[:,nc.real_alloff,:]
+                     ]
+        elif sequence is valid_seqs[2]: #ep, a, c, r
+            const_R_matix, const_A_matrix, const_C_matrix, const_E_matrix = self.Ugen_EP_A_C_R(nc)
+            Ustage = [
+                lambda lam: self.basis.h_e(lam)*const_E_matrix + \
+                            (self.basis.h_e(lam)**2)*const_P2_matrix + \
+                            self.basis.h_e(lam)*const_P_matrix + \
+                            self.basis.h_a(lam)*const_A_matrix + \
+                            nc.u_kln[:,nc.real_CR,:],
+                lambda lam: lam * const_C_matrix + \
+                            nc.u_kln[:,nc.real_R,:],
+                lambda lam: self.basis.h_r(lam)*const_R_matrix + \
+                            nc.u_kln[:,nc.real_alloff,:]
+                     ]
+            
+                           
+
+                    self.basis.h_e(lamE)*const_E_matrix + \
+                    (self.basis.h_e(lamE)**2)*const_PMEsquare_matrix + \
+                    self.basis.h_e(lamE)*const_PMEsingle_matrix + \
+                    self.basis.h_r(lamR)*const_R_matrix + \
+                    self.basis.h_a(lamA)*const_A_matrix + \
+                    nc.u_kln[:,nc.real_alloff,:]
+
         extra_count = extra_states.nstates
         Nbasis = len(basislabels)
         #Generate the new u_kln
@@ -470,7 +548,7 @@ class BasisVariance:
         if nc.PME_isolated:
             if nc.real_PMEAR:
                 PMEFull = nc.u_kln[:,nc.real_PMEAR,:] - nc.u_kln[:,nc.real_CAR,:]
-                PMELess = nc.u_kln[:,nc.real_PMEsolve,:] - nc.u_kln[:,nc.real_AR,:]
+                PMELess = nc.u_kln[:,nc.real_PMEsolve,:] - nc.u_kln[:,nc.real_CAR,:]
                 try:
                     multi_lam = self.basis.multiple_lam
                 except:
@@ -502,43 +580,6 @@ class BasisVariance:
             const_A_matrix = (nc.u_kln[:,nc.real_AR+1,:] - nc.u_kln[:,nc.real_alloff,:] - self.basis.base_basis.h_r(nc.real_R_states[nc.real_AR+1])*const_R_matrix)/self.basis.base_basis.h_a(nc.real_A_states[nc.real_AR+1])
         else:
             const_A_matrix = nc.u_kln[:,nc.real_AR,:] - nc.u_kln[:,nc.real_R,:]
-        #Construct u_kln
-        ##Sanity check
-        #import pdb
-        ###RandAchanging = numpy.logical_and(nc.real_R_states==nc.real_A_states, nc.real_R_states < 1)
-        ###ref1 = numpy.array(range(nc.nstates))[RandAchanging][0]
-        ###ref2 = numpy.array(range(nc.nstates))[RandAchanging][1]
-        ###U1 = nc.u_kln[:,ref1,:] - nc.u_kln[:,nc.real_alloff,:]
-        ###U2 = nc.u_kln[:,ref2,:] - nc.u_kln[:,nc.real_alloff,:]
-        ###lam1 = nc.real_R_states[ref1]
-        ###lam2 = nc.real_R_states[ref2]
-        ###ha1 = self.basis.base_basis.h_a(lam1)
-        ###ha2 = self.basis.base_basis.h_a(lam2)
-        ###hr1 = self.basis.base_basis.h_r(lam1)
-        ###hr2 = self.basis.base_basis.h_r(lam2)
-        ###const_A_matrix = (U2*hr1 - hr2*U1)/(ha2*hr1 - hr2*ha1)
-        ###const_R_matrix = (U1-ha1*const_A_matrix)/hr1
-        #san_u_kln = numpy.zeros(nc.u_kln.shape)
-        ##sampledlamRA= numpy.concatenate( (numpy.array([1]*4), scipy.linspace(1,0,11)) )
-        #sampledlamRA= scipy.linspace(.9,0,10)
-        ##sampledlamE= numpy.concatenate( (scipy.linspace(1,0,5),numpy.array([0]*10)) )
-        #sampledlamE= scipy.linspace(1,0,5)
-        #pdb.set_trace()
-        #for i in range(len(sampledlamE)):
-        #    lamE = sampledlamE[i]
-        #    san_u_kln[:,i,:] = \
-        #        self.basis.base_basis.h_e(lamE)*const_E_matrix + \
-        #        (self.basis.base_basis.h_e(lamE)**2)*const_PMEsquare_matrix + \
-        #        self.basis.base_basis.h_e(lamE)*const_PMEsingle_matrix + \
-        #        nc.u_kln[:,nc.real_AR,:]
-        #for i in range(len(sampledlamRA)):
-        #    lamRA = sampledlamRA[i]
-        #    san_u_kln[:,i+len(sampledlamE),:] = \
-        #        self.basis.base_basis.h_r(lamRA)*const_R_matrix + \
-        #        self.basis.base_basis.h_a(lamRA)*const_A_matrix + \
-        #        nc.u_kln[:,nc.real_alloff,:]
-        #deltaU = nc.u_kln[:15,:15,:] - san_u_kln[:15,:15,:]
-        #pdb.set_trace()
         for i in range(extra_count):
             lamE = extra_states.E_states[i]
             lamR = extra_states.R_states[i]
@@ -623,6 +664,22 @@ class BasisVariance:
                 expected_values['dEu' + label + '_' + crosslabel] = dEu_ij
         expected_values['sorting_items'] = [i for i in expected_values.keys() if i not in exclude_from_sorting]
         return expected_values
+
+    def buildExpectations_Staged(self, nc, basislabels, u_kln_new, N_k_new, verbose=None)
+        if verbose is None:
+            verbose=self.default_verbosity
+        expected_values = {
+            'labels':basislabels,
+            'Nbasis':len(basislabels),i}
+        if 'P' in basislabels:
+            expected_values['dswitchP'] = self.basis.dh_e
+            expected_values['dswitchP2'] = lambda X: 2*self.basis.h_e(X) * self.basis.dh_e
+        if 'E' in basislabels:
+            expected_values[
+        if 'C' in basislabels:
+        if 'R' in basislabels:
+        if 'A' in basislabels:
+        
         
     #---------------------------------------------------------------------------------------------
 
