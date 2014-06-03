@@ -511,12 +511,29 @@ class BasisVariance:
             variance[offset] = simps(integrand[offset],lam_master)
         return integrand,variance
 
+    #---------------------------------------------------------------------------------------------
     def seqGen(self, sampled, lams = self.lam_range):
         extra_lam = numpy.empty(0)
         for i in lams:
             if not numpy.any([numpy.allclose([t],[i]) for t in sampled]) :
                 extra_lam = numpy.append(extra_lam,i)
         return extra_lam
+
+    def seqSolv(self, stage_range, sampled, extras, nc=self.complex, outlam=self.lam_range):
+        #determine the sequence to pull from the data
+        nout = len(outlam)
+        all_ndx_sorted = numpy.zeros(nout, numpy.int32)
+        extracount = 0
+        for i in xrange(nout):
+            #Determine if our lambda is somewhere in the sampled
+            contianer = numpy.array([numpy.allclose(t,outlam[i]) for t in sampled)
+            if not numpy.any(container):
+                #If entry not part of simulated states, grap from extra
+                all_ndx_sorted[i] = extras[extracount]
+                extracount += 1
+            else: #Pull from the real state
+                all_ndx_sorted[i] = int(stage_range[container]) #There should be only one True here if set up stage_range and sampled correctly
+        return all_ndx_sorted #This is already a 0->1 order
 
     #---------------------------------------------------------------------------------------------
     def vargenerate_master(self, sequence=self.checkSequence()[0], lam_in=self.lam_range, verbose=None, calculate_var=True, calculatedhdl=False, return_error=False, bootstrap_error=False, bootstrap_count=200, bootstrap_basis=None, bootstrap_lam=None): 
@@ -573,28 +590,9 @@ class BasisVariance:
             extra2 = self.seqGen(sampled[2]) #Stage 2: CR -> R
             extra3 = self.seqGen(sampled[3]) #Stage 3: R -> off
             extra_lam = [extra0, extra1, extra2, extra3]
+        #Find the expectations:
+        expectations = self.buildExpectations_master(self.complex, extra_lam, sequence, verbose=verbose)        
             
-            
-        #Calculate the variance of the original basis set
-        lam_out = statelist(xe,xr,xa)
-        
-        #Construct the list of extra states we want to sample
-        extra_R_list = numpy.empty(0)
-        extra_A_list = numpy.empty(0)
-        extra_E_list = numpy.empty(0)
-        sampledR = self.complex.real_R_states
-        sampledA = self.complex.real_A_states
-        if self.complex.Inversion: #Fix this eventually
-            sampledE = self.basis.h_e_inv(self.complex.real_E_states)
-        else:
-            sampledE = self.complex.real_E_states
-        for i,j,k in zip(xe,xr,xa):
-            if not numpy.any([numpy.allclose([t,u,v],[i,j,k]) for t,u,v in zip(sampledE,sampledR,sampledA)]) :
-                extra_E_list = numpy.append(extra_R_list,i)
-                extra_R_list = numpy.append(extra_R_list,j)
-                extra_A_list = numpy.append(extra_A_list,k)
-        extra_states = statelist(extra_E_list, extra_R_list, extra_A_list)
-
         #Find expectations, sort them
         expectations = self.buildExpected_master(self.complex, extra_states, verbose=verbose)
         sorted_ndx = self.sequence_master(self.complex, extra_states, lam_out=lam_out)
