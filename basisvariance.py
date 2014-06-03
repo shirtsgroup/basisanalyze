@@ -234,6 +234,18 @@ class BasisVariance:
         const_A_matrix = nc.u_kln[:,nc.real_EPCAR,:] - nc.u_kln[:,nc.real_EPCR,:]
         return const_R_matix, const_A_matrix, const_C_matrix, const_E_matrix
 
+    def checkSequence(self, seq=None)
+        valid_seqs = [ ['EP', 'C', 'AR'], ['EPA', 'C', 'R'], ['EP', 'A', 'C', 'R'], ['A', 'EP', 'C', 'R'] ]
+        if seq is None
+            return valid_seqs
+        else
+            if seq not in valid_seqs:
+                print "Only list of valid sequnces are:"
+                print valid_seqs
+                sys.exit(1)
+            else:
+                return
+
     def buildExpected_master(self, nc, extra_lam, sequence, verbose=None, bootstrap=False):#, basislabels=['E','P','PS','C','R','A']):
         """
         This particular bit of coding will be reworked in this branch to make sure that all of the possible scheudles can be handled in a general maner with minimal user input.
@@ -243,11 +255,8 @@ class BasisVariance:
         if verbose is None:
             verbose=self.default_verbosity
         #Validate the sequence
-        valid_seqs = [ ['EP', 'C', 'AR'], ['EPA', 'C', 'R'], ['EP', 'A', 'C', 'R'], ['A', 'EP', 'C', 'R'] ]
-        if sequnce not in valid_seqs:
-            print "Only list of valid sequnces are:"
-            print valid_seqs
-            sys.exit(1)
+        self.checkSequence(seq=sequence)
+        valid_seqs = self.checkSequence()
         nstage = len(sequence)
         if len(extra_lam) != nstage:
             print "Incorrect number of extra_lam arguments. There must be at least one item per stage, even if its an empty object"
@@ -393,7 +402,7 @@ class BasisVariance:
                 mbar = MBAR(u_klns[stage_name], N_ks[stage_name], verbose = verbose, method = 'adaptive', initial_f_k=numpy.concatenate((nc.mbar.f_k,numpy.zeros(nxl))))
             else:
                 mbar = MBAR(u_klns[stage_name], N_ks[stage_name], verbose = verbose, method = 'adaptive')
-            expected_values[stage_name] = {'labels' = basis_labels}
+            expected_values[stage_name] = {'labels':basis_labels, 'Nbasis':Nbasis}
             for label in basis_labels:
                  if   label == "E":
                     expected_values[stage_name]["dswitch" + label] = self.basis.dh_e
@@ -459,26 +468,6 @@ class BasisVariance:
             dhdl_dict['minus'] = dhdl_calc - dhdl_err
         return dhdl_dict
         
-    def calcsecond(self, EU, dEU, lam_range, return_error=False):
-        #Special case with a singe lam schedule and pure linear alchemical switch, the math works here
-        del_space=lam_range[1]-lam_range[0]
-        if return_error:
-            to_integrate = {'plus':EU+dEU, 'minus':EU-dEU, 'natural':EU}
-        else:
-            to_integrate = {'natural':EU}
-        integrand = {}
-        variance = {}
-        for key in to_integrate:
-            integrand[key] = numpy.zeros(len(lam_range))
-            for i in range(len(lam_range)):
-                if i <=2: #Forward fintie differences, 2nd order
-                    integrand[key][i] = - ( -3*to_integrate[key][i] + 4*to_integrate[key][i+1] - to_integrate[key][i+2] )/(2*del_space)
-                elif i >= len(lam_range)-3: #Backwards finite differences, 2nd order
-                    integrand[key][i]= - ( 3*to_integrate[key][i] - 4*to_integrate[key][i-1] + to_integrate[key][i-2] )/(2*del_space)
-                else: #Central finite differences, 3rd order
-                    integrand[key][i] = - ( to_integrate[key][i-2] - 8*to_integrate[key][i-1] + 8*to_integrate[key][i+1] - to_integrate[key][i+2] )/(12*del_space)
-            variance[key] = simps(integrand[key],lam_range)
-        return integrand,variance
 
     def calcvar_master(self, expected, basis, lam_master, return_error=False):
         #calculate the variance directly
@@ -522,46 +511,145 @@ class BasisVariance:
             variance[offset] = simps(integrand[offset],lam_master)
         return integrand,variance
 
-    def calcvar(self, expected, basis, lam_r, lam_a, return_error=False):
-        #calculate the variance directly
-        dr = basis.dh_r(lam_r)
-        da = basis.dh_a(lam_a)
-        if numpy.all(lam_a == 0): #Check for if lam_a is changing at all
-            da = numpy.zeros(len(dr))
-    
-        if return_error:
-            to_integrate = {'plus': {
-                'var_ur':expected['var_ur'] + expected['dvar_ur'], 
-                'var_ua':expected['var_ua'] + expected['dvar_ua'],
-                'Eura':  expected['Eura']   + expected['dEura'],
-                'Eur':   expected['Eur']    + expected['dEur'],
-                'Eua':   expected['Eua']    + expected['dEua']},
-                          'minus':{
-                'var_ur':expected['var_ur'] - expected['dvar_ur'], 
-                'var_ua':expected['var_ua'] - expected['dvar_ua'],
-                'Eura':  expected['Eura']   - expected['dEura'],
-                'Eur':   expected['Eur']    - expected['dEur'],
-                'Eua':   expected['Eua']    - expected['dEua']},
-                          'natural':{
-                'var_ur':expected['var_ur'], 
-                'var_ua':expected['var_ua'],
-                'Eura':  expected['Eura'],
-                'Eur':   expected['Eur'],
-                'Eua':   expected['Eua']}
-            }
+    def seqGen(self, sampled, lams = self.lam_range):
+        extra_lam = numpy.empty(0)
+        for i in lams:
+            if not numpy.any([numpy.allclose([t],[i]) for t in sampled]) :
+                extra_lam = numpy.append(extra_lam,i)
+        return extra_lam
+
+    #---------------------------------------------------------------------------------------------
+    def vargenerate_master(self, sequence=self.checkSequence()[0], lam_in=self.lam_range, verbose=None, calculate_var=True, calculatedhdl=False, return_error=False, bootstrap_error=False, bootstrap_count=200, bootstrap_basis=None, bootstrap_lam=None): 
+        #In progress function to calculate the total variance along one transformation, independent of path
+
+        #Set all flags
+        if verbose is None:
+            verbose=self.default_verbosity
+        if calculatedhdl and not calculate_var:
+            print "Warning: dHdL calculation requires variance calculation"
+            print "Turning on variance calculation"
+            calculate_var=True
+        if bootstrap_error and return_error:
+            print "Warning: Normal error and bootstrap error are incompatable, using bootstrap only"
+            return_error=False
+        if bootstrap_error:
+            if int(bootstrap_count) < 2:
+                print "Must have more than 1 bootstrap sample. Disabling bootstrap sampling!"
+                bootstrap_error = False
+        self.checkSequence(sequence)
+        valid_seqs = self.checkSequence()
+        nstage = len(sequence)
+        valid_seqs = [ ['EP', 'C', 'AR'], ['EPA', 'C', 'R'], ['EP', 'A', 'C', 'R'], ['A', 'EP', 'C', 'R'] ]
+        states = xrange(self.complex.nstates)
+        #Figure out sequencing, need to determine actual state
+        #Need the stage_ranges and the sampled for index sorting later
+        if sequence is valid_seqs[0] #ep c ar
+            stage_ranges = [ states[nc.real_EPCAR:nc.real_CAR+1], states[nc.real_CAR:nc.real_AR+1], states[nc.real_AR:nc.real_alloff+1] ]
+            sampled = [ nc.real_E_states[stage_ranges[0]], nc.real_C_states[stage_ranges[1]], nc.real_R_states[stage_ranges[2]] ]
+            extra0 = self.seqGen(sampled[0]) #Stage 0: EPCAR -> CAR
+            extra1 = self.seqGen(sampled[1]) #Stage 1: CAR -> AR
+            extra2 = self.seqGen(sampled[2]) #Stage 2: AR -> off
+            extra_lam = [extra0, extra1, extra2]
+        if sequence is valid_seqs[1] #epa c r
+            stage_ranges = [ states[nc.real_EPCAR:nc.real_CR+1], states[nc.real_CR:nc.real_R+1], states[nc.real_R:nc.real_alloff+1] ]
+            sampled = [ nc.real_E_states[stage_ranges[0]], nc.real_C_states[stage_ranges[1]], nc.real_R_states[stage_ranges[2]] ]
+            extra0 = self.seqGen(sampled[0]) #Stage 0: EPCAR -> CR
+            extra1 = self.seqGen(sampled[1]) #Stage 1: CR -> R
+            extra2 = self.seqGen(sampled[2]) #Stage 2: R -> off
+            extra_lam = [extra0, extra1, extra2]
+        if sequence is valid_seqs[2] #ep a c r
+            stage_ranges = [ states[nc.real_EPCAR:nc.real_CAR+1], states[nc.real_CAR:nc.real_CR+1], states[nc.real_CR:nc.real_R+1], states[nc.real_R:nc.real_alloff+1] ]
+            sampled = [ nc.real_E_states[stage_ranges[0]], nc.real_A_states[stage_ranges[1]], nc.real_C_states[stage_ranges[2]], nc.real_R_states[stage_ranges[3] ]
+            extra0 = self.seqGen(sampled[0]) #Stage 0: EPCAR -> CAR
+            extra1 = self.seqGen(sampled[1]) #Stage 1: CAR -> CR
+            extra2 = self.seqGen(sampled[2]]) #Stage 2: CR -> R
+            extra3 = self.seqGen(sampled[3]) #Stage 3: R -> off
+            extra_lam = [extra0, extra1, extra2, extra3]
+        if sequence is valid_seqs[3] #a ep c r
+            stage_ranges = [ states[nc.real_EPCAR:nc.real_EPCR+1], states[nc.real_EPCR:nc.real_CR+1], states[nc.real_CR:nc.real_R+1], states[nc.real_R:nc.real_alloff+1] ]
+            sampled = [ nc.real_A_states[stage_ranges[0]], nc.real_E_states[stage_ranges[1]], nc.real_C_states[stage_ranges[2]], nc.real_R_states[stage_ranges[3] ]
+            extra0 = self.seqGen(sampled[0]) #Stage 0: EPCAR -> EPCR
+            extra1 = self.seqGen(smapled[1]) #Stage 1: EPCR -> CR
+            extra2 = self.seqGen(sampled[2]) #Stage 2: CR -> R
+            extra3 = self.seqGen(sampled[3]) #Stage 3: R -> off
+            extra_lam = [extra0, extra1, extra2, extra3]
+            
+            
+        #Calculate the variance of the original basis set
+        lam_out = statelist(xe,xr,xa)
+        
+        #Construct the list of extra states we want to sample
+        extra_R_list = numpy.empty(0)
+        extra_A_list = numpy.empty(0)
+        extra_E_list = numpy.empty(0)
+        sampledR = self.complex.real_R_states
+        sampledA = self.complex.real_A_states
+        if self.complex.Inversion: #Fix this eventually
+            sampledE = self.basis.h_e_inv(self.complex.real_E_states)
         else:
-            to_integrate = {'natural':expected}
-        #Calculate the variance
-        integrand = {}
-        variance = {}
-        for key in to_integrate:
-            r_only_term = dr**2 * to_integrate[key]['var_ur']
-            a_only_term = da**2 * to_integrate[key]['var_ua']
-            cross_term = 2* dr*da * (to_integrate[key]['Eura'] - to_integrate[key]['Eur']*to_integrate[key]['Eua'])
-            integrand[key] = r_only_term + a_only_term + cross_term
-            #This will need modified to work in other alchemical schedules
-            variance[key] = simps(integrand[key],lam_r)
-        return integrand,variance
+            sampledE = self.complex.real_E_states
+        for i,j,k in zip(xe,xr,xa):
+            if not numpy.any([numpy.allclose([t,u,v],[i,j,k]) for t,u,v in zip(sampledE,sampledR,sampledA)]) :
+                extra_E_list = numpy.append(extra_R_list,i)
+                extra_R_list = numpy.append(extra_R_list,j)
+                extra_A_list = numpy.append(extra_A_list,k)
+        extra_states = statelist(extra_E_list, extra_R_list, extra_A_list)
+
+        #Find expectations, sort them
+        expectations = self.buildExpected_master(self.complex, extra_states, verbose=verbose)
+        sorted_ndx = self.sequence_master(self.complex, extra_states, lam_out=lam_out)
+        for key in expectations['sorting_items']:
+            expectations[key] = expectations[key][sorted_ndx]
+        #Perform remaining calculations
+        if calculate_var:
+            integrand,variance = self.calcvar_master(expectations, self.basis, lam_out.E_states, return_error=return_error)
+            if calculatedhdl:
+                dhdl = self.calcdhdl_master(expectations, self.basis, lam_out.E_states, return_error=return_error)
+            #If bootstrap is on, run it
+            if bootstrap_error:
+                if bootstrap_basis is None: #Allows one to pass in prediced basis functions from the inv_var calls
+                    bootstrap_basis=self.basis
+                if bootstrap_lam is None:
+                    bootstrap_lam=lam_out.E_states
+                #Deterimine shape of output matrix [le,bootstrap_count]
+                bootstrap_integrands = numpy.zeros([lam_out.nstates,bootstrap_count])
+                bootstrap_dhdl = numpy.zeros([lam_out.nstates,bootstrap_count])
+                bootstrap_error = numpy.zeros([lam_out.nstates])
+                for i in xrange(bootstrap_count):
+                    print "Bootstrap pass: %d / %d" % (i+1,bootstrap_count)
+                    #Normal case
+                    boot_expect = self.buildExpected_master(self.complex, extra_states, verbose=verbose, bootstrap=True)
+
+                    for key in boot_expect['sorting_items']:
+                        boot_expect[key] = boot_expect[key][sorted_ndx]
+
+                    boot_integrand_holder, boot_variance_junk = self.calcvar_master(boot_expect, bootstrap_basis, bootstrap_lam, return_error=False)
+                    if calculatedhdl:
+                        boot_dhdl_holder = self.calcdhdl_master(boot_expect, bootstrap_basis, bootstrap_lam, return_error=False)
+                        bootstrap_dhdl[:,i] = boot_dhdl_holder['natural']
+                    bootstrap_integrands[:,i] = boot_integrand_holder['natural']
+                #Calculate variance of the collection
+                bootstrap_error[:] = numpy.sqrt(numpy.var(bootstrap_integrands[:,:], axis=1))
+                integrand['plus'] = integrand['natural'] + bootstrap_error
+                integrand['minus'] = integrand['natural'] - bootstrap_error
+                integrand['bootstrap_error'] = bootstrap_error
+                if calculatedhdl:
+                    bootstrap_dhdl_error = numpy.sqrt(numpy.var(bootstrap_dhdl[:,:], axis=1))
+                    dhdl['plus'] = dhdl['natural'] + bootstrap_dhdl_error
+                    dhdl['minus'] = dhdl['natural'] - bootstrap_dhdl_error
+                    dhdl['bootstrap_error'] = bootstrap_dhdl_error
+            if calculatedhdl:
+                return integrand,variance,dhdl
+            else:
+                return integrand,variance
+        else:
+            return expectations
+    #---------------------------------------------------------------------------------------------
+
+
+
+
+
     #---------------------------------------------------------------------------------------------
     def vargenerate_electrostatics(self, lam_in_e=None, verbose=None, calculate_var=True, calculatedhdl=False, expect_method='complete', return_error=False, bootstrap_error=False, bootstrap_count=200, bootstrap_basis=None, bootstrap_lam=None, basis_derivatives=None):
         if verbose is None:
@@ -929,112 +1017,7 @@ class BasisVariance:
         else:
             return expectations
 
-    #---------------------------------------------------------------------------------------------
-    def vargenerate_master(self, verbose=None, lam_in_r=None, lam_in_a=None, lam_in_e=None, calculate_var=True, calculatedhdl=False, return_error=False, bootstrap_error=False, bootstrap_count=200, bootstrap_basis=None, bootstrap_lam=None): 
-        #In progress function to calculate the total variance along one transformation, independent of path
 
-        #Set all flags
-        if verbose is None:
-            verbose=self.default_verbosity
-        if calculatedhdl and not calculate_var:
-            print "Warning: dHdL calculation requires variance calculation"
-            print "Turning on variance calculation"
-            calculate_var=True
-        if bootstrap_error and return_error:
-            print "Warning: Normal error and bootstrap error are incompatable, using bootstrap only"
-            return_error=False
-        if bootstrap_error:
-            if int(bootstrap_count) < 2:
-                print "Must have more than 1 bootstrap sample. Disabling bootstrap sampling!"
-                bootstrap_error = False
-        if lam_in_r is None:
-            xr = self.lam_range
-        else:
-            xr = lam_in_r
-        if lam_in_a is None:
-            xa = self.lam_range
-        else:
-            xa = lam_in_a
-        if lam_in_e is None:
-            xe = self.lam_range
-        else:
-            xe = lam_in_e
-        #Calculate the variance of the original basis set
-        if not xr.shape == xa.shape or not xr.shape == xe.shape:
-            print 'input lambdas not the same size!'
-            print '# repulsive lambda:     %i' % (xr.size)
-            print '# attractive lambda:    %i' % (xa.size)
-            print '# electrostatic lambda: %i' % (xe.size)
-            sys.exit(1)
-        lam_out = statelist(xe,xr,xa)
-        
-        #Construct the list of extra states we want to sample
-        extra_R_list = numpy.empty(0)
-        extra_A_list = numpy.empty(0)
-        extra_E_list = numpy.empty(0)
-        sampledR = self.complex.real_R_states
-        sampledA = self.complex.real_A_states
-        if self.complex.Inversion: #Fix this eventually
-            sampledE = self.basis.h_e_inv(self.complex.real_E_states)
-        else:
-            sampledE = self.complex.real_E_states
-        for i,j,k in zip(xe,xr,xa):
-            if not numpy.any([numpy.allclose([t,u,v],[i,j,k]) for t,u,v in zip(sampledE,sampledR,sampledA)]) :
-                extra_E_list = numpy.append(extra_R_list,i)
-                extra_R_list = numpy.append(extra_R_list,j)
-                extra_A_list = numpy.append(extra_A_list,k)
-        extra_states = statelist(extra_E_list, extra_R_list, extra_A_list)
-
-        #Find expectations, sort them
-        expectations = self.buildExpected_master(self.complex, extra_states, verbose=verbose)
-        sorted_ndx = self.sequence_master(self.complex, extra_states, lam_out=lam_out)
-        for key in expectations['sorting_items']:
-            expectations[key] = expectations[key][sorted_ndx]
-        #Perform remaining calculations
-        if calculate_var:
-            integrand,variance = self.calcvar_master(expectations, self.basis, lam_out.E_states, return_error=return_error)
-            if calculatedhdl:
-                dhdl = self.calcdhdl_master(expectations, self.basis, lam_out.E_states, return_error=return_error)
-            #If bootstrap is on, run it
-            if bootstrap_error:
-                if bootstrap_basis is None: #Allows one to pass in prediced basis functions from the inv_var calls
-                    bootstrap_basis=self.basis
-                if bootstrap_lam is None:
-                    bootstrap_lam=lam_out.E_states
-                #Deterimine shape of output matrix [le,bootstrap_count]
-                bootstrap_integrands = numpy.zeros([lam_out.nstates,bootstrap_count])
-                bootstrap_dhdl = numpy.zeros([lam_out.nstates,bootstrap_count])
-                bootstrap_error = numpy.zeros([lam_out.nstates])
-                for i in xrange(bootstrap_count):
-                    print "Bootstrap pass: %d / %d" % (i+1,bootstrap_count)
-                    #Normal case
-                    boot_expect = self.buildExpected_master(self.complex, extra_states, verbose=verbose, bootstrap=True)
-
-                    for key in boot_expect['sorting_items']:
-                        boot_expect[key] = boot_expect[key][sorted_ndx]
-
-                    boot_integrand_holder, boot_variance_junk = self.calcvar_master(boot_expect, bootstrap_basis, bootstrap_lam, return_error=False)
-                    if calculatedhdl:
-                        boot_dhdl_holder = self.calcdhdl_master(boot_expect, bootstrap_basis, bootstrap_lam, return_error=False)
-                        bootstrap_dhdl[:,i] = boot_dhdl_holder['natural']
-                    bootstrap_integrands[:,i] = boot_integrand_holder['natural']
-                #Calculate variance of the collection
-                bootstrap_error[:] = numpy.sqrt(numpy.var(bootstrap_integrands[:,:], axis=1))
-                integrand['plus'] = integrand['natural'] + bootstrap_error
-                integrand['minus'] = integrand['natural'] - bootstrap_error
-                integrand['bootstrap_error'] = bootstrap_error
-                if calculatedhdl:
-                    bootstrap_dhdl_error = numpy.sqrt(numpy.var(bootstrap_dhdl[:,:], axis=1))
-                    dhdl['plus'] = dhdl['natural'] + bootstrap_dhdl_error
-                    dhdl['minus'] = dhdl['natural'] - bootstrap_dhdl_error
-                    dhdl['bootstrap_error'] = bootstrap_dhdl_error
-            if calculatedhdl:
-                return integrand,variance,dhdl
-            else:
-                return integrand,variance
-        else:
-            return expectations
-    #---------------------------------------------------------------------------------------------
 
     def inv_var(self, being_predicted_basis, predicted_lam_r, predicted_lam_a, return_error=False, calculatedhdl=False, verbose=None, bootstrap_error=False, bootstrap_count=200):
         if verbose is None:

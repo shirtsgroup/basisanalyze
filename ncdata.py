@@ -573,7 +573,7 @@ class ncdata:
         return state_index
         #Remove states where all other basis functions are not 0
 
-    def logical_all_and(*args):
+    def logical_all_and(self, *args):
         #Funciton to do a full logical and on all arguments, effectivley overload numpy.logical_and
         #Accepts a full sequence of numpy Truth arguments of the same size and does logical_and on all of them together
         nargs = len(args)
@@ -667,52 +667,52 @@ class ncdata:
         if self.PME_isolated: #Logic to solve for isolated PME case
             #Figure out the Fully coupled state, EPCAR
             try:
-                self.real_EPCAR = int(indicies[logical_all_and(coupled['E'], coupled['P'], coupled['C'], coupled['A'], coupled['R'])
+                self.real_EPCAR = int(indicies[self.logical_all_and(coupled['E'], coupled['P'], coupled['C'], coupled['A'], coupled['R'])
             except TypeError:
                 self.real_EPCAR = None
             #PCAR
             try:
-                self.real_PCAR = int(indicies[logical_all_and(decoupled['E'], coupled['P'], coupled['C'], coupled['A'], coupled['R'])
+                self.real_PCAR = int(indicies[self.logical_all_and(decoupled['E'], coupled['P'], coupled['C'], coupled['A'], coupled['R'])
             except TypeError:
                 self.real_PCAR = None
             #EPCR, needed in a particular sequence
             try:
-                self.real_EPCR = int(indicies[logical_all_and(coupled['E'], coupled['P'], coupled['C'], decoupled['A'], coupled['R'])
+                self.real_EPCR = int(indicies[self.logical_all_and(coupled['E'], coupled['P'], coupled['C'], decoupled['A'], coupled['R'])
             except TypeError:
                 self.real_EPCR = None
             #PCR, needed for same particular sequence
             try:
-                self.real_PCR = int(indicies[logical_all_and(decoupled['E'], coupled['P'], coupled['C'], decoupled['A'], coupled['R'])
+                self.real_PCR = int(indicies[self.logical_all_and(decoupled['E'], coupled['P'], coupled['C'], decoupled['A'], coupled['R'])
             except TypeError:
                 self.real_PCR = None
             #CAR
             try:
-                self.real_CAR = int(indicies[logical_all_and(decoupled['E'], decoupled['P'], coupled['C'], coupled['A'], coupled['R'])
+                self.real_CAR = int(indicies[self.logical_all_and(decoupled['E'], decoupled['P'], coupled['C'], coupled['A'], coupled['R'])
             except TypeError:
                 self.real_CAR = None
             #AR
             try:
-                self.real_AR = int(indicies[logical_all_and(decoupled['E'], decoupled['P'], decoupled['C'], coupled['A'], coupled['R'])
+                self.real_AR = int(indicies[self.logical_all_and(decoupled['E'], decoupled['P'], decoupled['C'], coupled['A'], coupled['R'])
             except TypeError:
                 self.real_AR = None
             #R
             try:
-                self.real_R = int(indicies[logical_all_and(decoupled['E'], decoupled['P'], decoupled['C'], decoupled['A'], coupled['R'])
+                self.real_R = int(indicies[self.logical_all_and(decoupled['E'], decoupled['P'], decoupled['C'], decoupled['A'], coupled['R'])
             except TypeError:
                 self.real_R = None
             #CR
             try:
-                self.real_CR = int(indicies[logical_all_and(decoupled['E'], decoupled['P'], decoupled['C'], coupled['A'], decoupled['R'])
+                self.real_CR = int(indicies[self.logical_all_and(decoupled['E'], decoupled['P'], decoupled['C'], coupled['A'], decoupled['R'])
             except TypeError:
                 self.real_CR = None
             #Alloff
             try:
-                self.real_alloff = int(indicies[logical_all_and(decoupled['E'], decoupled['P'], decoupled['C'], decoupled['A'], decoupled['R'])
+                self.real_alloff = int(indicies[self.logical_all_and(decoupled['E'], decoupled['P'], decoupled['C'], decoupled['A'], decoupled['R'])
             except TypeError:
                 self.real_alloff = None
             try: # Psolve
                 #Where E is off, ARC are coupled, and P is not (0 or 1)
-                self.real_Psolve = int(indicies[logical_all_and(decoupled['E'], numpy.inverse(coupled['P']), numpy.inverse(decoupled['P']), coupled['C'], coupled['A'], coupled['R'])
+                self.real_Psolve = int(indicies[self.logical_all_and(decoupled['E'], numpy.inverse(coupled['P']), numpy.inverse(decoupled['P']), coupled['C'], coupled['A'], coupled['R'])
             except TypeError:
                 self.real_Psolve = None
         else:
