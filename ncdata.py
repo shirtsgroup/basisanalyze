@@ -680,6 +680,11 @@ class ncdata:
                 self.real_EPCR = int(indicies[logical_all_and(coupled['E'], coupled['P'], coupled['C'], decoupled['A'], coupled['R'])
             except TypeError:
                 self.real_EPCR = None
+            #PCR, needed for same particular sequence
+            try:
+                self.real_PCR = int(indicies[logical_all_and(decoupled['E'], coupled['P'], coupled['C'], decoupled['A'], coupled['R'])
+            except TypeError:
+                self.real_PCR = None
             #CAR
             try:
                 self.real_CAR = int(indicies[logical_all_and(decoupled['E'], decoupled['P'], coupled['C'], coupled['A'], coupled['R'])

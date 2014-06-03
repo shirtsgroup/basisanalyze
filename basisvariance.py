@@ -209,225 +209,6 @@ class BasisVariance:
         #Reverse sequence to return a 0 -> 1 order
         return all_ndx_sorted[::-1]
 
-    #---------------------------------------------------------------------------------------------
-    def buildExpected_cap(self, nc, extra_states, verbose=None, bootstrap=False, basislabels=['LJ'], single_basis=None):
-        extra_count = extra_states.nstates
-        Nbasis = len(basislabels)
-        #if single_basis: #Extract only the capped and uncapped states
-        #    cappedndx = single_basis
-        #    uncappedndx = 0
-        #    nstates = 2
-        #    u_kln_new = numpy.zeros([nstates + extra_count, nstates + extra_count, nc.retained_iters], numpy.float64)
-        #    N_k_new = numpy.zeros(nstates + extra_count, numpy.int32)
-        #    u_kln= numpy.zeros([nstates, nstates, nc.retained_iters])
-        #    for k in range(nstates):
-        #        kndx = [uncappedndx,cappedndx][k]
-        #        N_k_new[k] = nc.N_k[kndx]
-        #        for l in range(nstates):
-        #            lndx = [uncappedndx,cappedndx][l]
-        #            u_kln[k,l,:] = nc.u_kln[kndx,lndx,:]
-        #    const_LJ_matrix = u_kln[:,0,:] - u_kln[:,1,:]
-        #    const_Un_matrix = u_kln[:,1,:]
-        #    mbarndx = [uncappedndx,cappedndx]
-        #else:
-        #    #Generate the new u_kln
-        #    u_kln_new = numpy.zeros([nc.nstates + extra_count, nc.nstates + extra_count, nc.retained_iters], numpy.float64)
-        #    N_k_new = numpy.zeros(nc.nstates + extra_count, numpy.int32)
-        #    u_kln_new[:nc.nstates,:nc.nstates,:nc.retained_iters] = nc.u_kln
-        #    N_k_new[:nc.nstates] = nc.N_k
-        #    nstates = nc.nstates
-        #    const_LJ_matrix = u_kln[:,0,:] - nc.u_kln[:,-1,:]
-        #    #const_LJ_matrix = (nc.u_kln[:,2,:] - nc.u_kln[:,-1,:])/.5 #Should give same result without single basis
-        #    const_Un_matrix = nc.u_kln[:,-1,:]
-        #    mbarndx = range(nc.nstates)
-        #Generate the new u_kln
-        u_kln_new = numpy.zeros([nc.nstates + extra_count, nc.nstates + extra_count, nc.retained_iters], numpy.float64)
-        N_k_new = numpy.zeros(nc.nstates + extra_count, numpy.int32)
-        u_kln_new[:nc.nstates,:nc.nstates,:nc.retained_iters] = nc.u_kln
-        N_k_new[:nc.nstates] = nc.N_k
-        nstates = nc.nstates
-        mbarndx = range(nc.nstates)
-        if single_basis:
-            const_LJ_matrix = nc.u_kln[:,0,:] - nc.u_kln[:,single_basis,:]
-            const_Un_matrix = nc.u_kln[:,single_basis,:]
-        else:
-            const_LJ_matrix = nc.u_kln[:,0,:] - nc.u_kln[:,-1,:]
-            const_Un_matrix = nc.u_kln[:,-1,:]
-        #Generate containers for all the basis functions
-        individualU_kln = {}
-        for label in basislabels:
-            individualU_kln[label] = numpy.zeros(u_kln_new.shape, numpy.float64)
-        #Copy over the original data
-        N_samples = u_kln_new.shape[2]
-        #Constuct the new u_kln matrix
-        for i in range(extra_count):
-            lamLJ = extra_states.R_states[i]
-            u_kln_new[:nstates,i+nstates,:] = self.basis.h_r(lamLJ)*const_LJ_matrix + const_Un_matrix
-        #sanity = [1.0,.75,.5,.25,0]
-        #skln = numpy.zeros(nc.u_kln.shape)
-        #for i in range(5):
-        #    lamLJ = sanity[i]
-        #    skln[:,i,:] = self.basis.h_r(lamLJ)*const_LJ_matrix + nc.u_kln[:,-1,:]
-        #print skln - nc.u_kln
-        #assign individual parts
-        #for k in range(nstates):
-        #    if k in [0,1]:
-        #        individualU_kln['LJ'][:nstates,k,:] = nc.u_kln[:,0,:] - nc.u_kln[:,1,:]
-        #    else:
-        #        individualU_kln['LJ'][:nstates,k,:] = nc.u_kln[:,0,:] - nc.u_kln[:,k,:]
-        for i in range(extra_count+nstates):
-        #for i in range(nstates, extra_count+nstates):
-            individualU_kln['LJ'][:nstates,i,:] = const_LJ_matrix
-        #Handle bootstrap
-        if bootstrap:
-            u_kln_boot = numpy.zeros(u_kln_new.shape)
-            individualU_kln_boot = {}
-            for label in basislabels:
-                individualU_kln_boot[label] = numpy.zeros(u_kln_new.shape, numpy.float64)
-            for state in range(u_kln_boot.shape[0]):
-                samplepool = random_integers(0,N_samples-1,N_samples) #Pull the indicies for the sample space, N number of times
-                for i in xrange(len(samplepool)): #Had to put this in its own loop as u_kln_new[state,:,samplepool] was returning a NxK matrix instead of a KxN
-                    u_kln_boot[state,:,i] = u_kln_new[state,:,samplepool[i]]
-                    for label in basislabels:
-                        individualU_kln_boot[label][state,:,i] = individualU_kln[label][state,:,samplepool[i]]
-            #Copy over shuffled data
-            u_kln_new = u_kln_boot
-            for label in basislabels:
-                individualU_kln[label] = individualU_kln_boot[label]
-        #Prep MBAR
-        if nc.mbar_ready:
-            mbar = MBAR(u_kln_new, N_k_new, verbose = verbose, method = 'adaptive', initial_f_k=numpy.concatenate((nc.mbar.f_k[mbarndx],numpy.zeros(extra_count))))
-        else:
-            print "WARNING: The f_k is small enough when all zeros for this method that it often will not iterate. You should compute weights from all states first to get a decent initial estimate"
-            mbar = MBAR(u_kln_new, N_k_new, verbose = verbose, method = 'adaptive')
-        expected_values = {
-            'labels':basislabels, 
-            'Nbasis':Nbasis, 
-            'dswitchLJ':self.basis.dh_r}
-        exclude_from_sorting = expected_values.keys()
-        #Generate expectations
-        for i in range(Nbasis):
-            label = basislabels[i]
-            (Eui, dEui) = mbar.computeExpectations(individualU_kln[label])
-            (Eui2, dEui2) = mbar.computeExpectations(individualU_kln[label]**2)
-            expected_values['var_u'+label] = Eui2 - Eui**2
-            dvar_ui = numpy.sqrt(dEui2**2 + 2*(Eui*dEui)**2)
-            expected_values['dvar_u'+label] = dvar_ui
-            expected_values['Eu'+label] = Eui
-            expected_values['dEu'+label] = dEui
-            expected_values['Eu'+label + '2'] = Eui2
-            expected_values['dEu'+label + '2'] = dEui2
-            for j in range(i+1,Nbasis): #Compute the cross terms, no need to run i=j since that was handled above
-                crosslabel = basislabels[j]
-                (Eu_ij, dEu_ij) = mbar.computeExpectations(individualU_kln[label] * individualU_kln[crosslabel])
-                expected_values['Eu' + label + '_' + crosslabel] = Eu_ij
-                expected_values['dEu' + label + '_' + crosslabel] = dEu_ij
-        expected_values['sorting_items'] = [i for i in expected_values.keys() if i not in exclude_from_sorting]
-        return expected_values
-
-    def buildExpected_xform(self, const_matrices, nc, extra_states, verbose=None, bootstrap=False, basislabels=['e','pmesq','r','a']):
-        if verbose is None:
-            verbose=self.default_verbosity
-        extra_count = extra_states.nstates
-        Nbasis = len(basislabels)
-        #Fix the constant matrices
-        CM = const_matrices #Short hand
-        for key in CM.keys():
-            if CM[key].size > nc.u_kln[:,0,:].size:
-                CM[key] = CM[key][:,nc.retained_indices]
-        const_E_matrix = CM['E']
-        const_PMEsquare_matrix = CM['P']
-        const_A_matrix = CM['A']
-        const_R_matrix = CM['R']
-        const_Un_matrix = CM['Un']
-        #Generate the new u_kln
-        u_kln_new = numpy.zeros([nc.nstates + extra_count, nc.nstates + extra_count, nc.retained_iters], numpy.float64)
-        N_k_new = numpy.zeros(nc.nstates + extra_count, numpy.int32)
-        #Generate containers for all the basis functions
-        individualU_kln = {}
-        for label in basislabels:
-            individualU_kln[label] = numpy.zeros(u_kln_new.shape, numpy.float64)
-        #Copy over the original data
-        u_kln_new[:nc.nstates,:nc.nstates,:nc.retained_iters] = nc.u_kln
-        N_k_new[:nc.nstates] = nc.N_k
-        N_samples = u_kln_new.shape[2]
-        #Constuct the new u_kln matrix
-        for i in range(extra_count):
-            lamE = extra_states.E_states[i]
-            lamR = extra_states.R_states[i]
-	    lamA = extra_states.A_states[i]
-            u_kln_new[:nc.nstates,i+nc.nstates,:] = \
-                self.basis.h_e(lamE)*const_E_matrix + \
-                (self.basis.h_e(lamE)**2)*const_PMEsquare_matrix + \
-                self.basis.h_r(lamR)*const_R_matrix + \
-                self.basis.h_a(lamA)*const_A_matrix + \
-                const_Un_matrix
-        #assign individual parts
-        for i in range(extra_count+nc.nstates):
-            if 'e' in basislabels: individualU_kln['e'][:nc.nstates,i,:] = const_E_matrix
-            if 'pmesq' in basislabels: individualU_kln['pmesq'][:nc.nstates,i,:] = const_PMEsquare_matrix
-            if 'r' in basislabels: individualU_kln['r'][:nc.nstates,i,:] = const_R_matrix
-            if 'a' in basislabels: individualU_kln['a'][:nc.nstates,i,:] = const_A_matrix
-        #Handle bootstrap
-        if bootstrap:
-            u_kln_boot = numpy.zeros(u_kln_new.shape)
-            individualU_kln_boot = {}
-            for label in basislabels:
-                individualU_kln_boot[label] = numpy.zeros(u_kln_new.shape, numpy.float64)
-            for state in range(u_kln_boot.shape[0]):
-                samplepool = random_integers(0,N_samples-1,N_samples) #Pull the indicies for the sample space, N number of times
-                for i in xrange(len(samplepool)): #Had to put this in its own loop as u_kln_new[state,:,samplepool] was returning a NxK matrix instead of a KxN
-                    u_kln_boot[state,:,i] = u_kln_new[state,:,samplepool[i]]
-                    for label in basislabels:
-                        individualU_kln_boot[label][state,:,i] = individualU_kln[label][state,:,samplepool[i]]
-            #Copy over shuffled data
-            u_kln_new = u_kln_boot
-            for label in basislabels:
-                individualU_kln[label] = individualU_kln_boot[label]
-        #Prep MBAR
-        if nc.mbar_ready:
-            mbar = MBAR(u_kln_new, N_k_new, verbose = verbose, method = 'adaptive', initial_f_k=numpy.concatenate((nc.mbar.f_k,numpy.zeros(extra_count))))
-        else:
-            mbar = MBAR(u_kln_new, N_k_new, verbose = verbose, method = 'adaptive')
-        expected_values = {
-            'labels':basislabels, 
-            'Nbasis':Nbasis, 
-            'dswitche':self.basis.dh_e, 
-            'dswitchpmesq':lambda X: 2*self.basis.h_e(X)*self.basis.dh_e(X),
-            'dswitchr':self.basis.dh_r,
-            'dswitcha':self.basis.dh_a}
-        exclude_from_sorting = expected_values.keys()
-        #Generate expectations
-        for i in range(Nbasis):
-            label = basislabels[i]
-            (Eui, dEui) = mbar.computeExpectations(individualU_kln[label])
-            (Eui2, dEui2) = mbar.computeExpectations(individualU_kln[label]**2)
-            expected_values['var_u'+label] = Eui2 - Eui**2
-            dvar_ui = numpy.sqrt(dEui2**2 + 2*(Eui*dEui)**2)
-            expected_values['dvar_u'+label] = dvar_ui
-            expected_values['Eu'+label] = Eui
-            expected_values['dEu'+label] = dEui
-            expected_values['Eu'+label + '2'] = Eui2
-            expected_values['dEu'+label + '2'] = dEui2
-            for j in range(i+1,Nbasis): #Compute the cross terms, no need to run i=j since that was handled above
-                crosslabel = basislabels[j]
-                (Eu_ij, dEu_ij) = mbar.computeExpectations(individualU_kln[label] * individualU_kln[crosslabel])
-                expected_values['Eu' + label + '_' + crosslabel] = Eu_ij
-                expected_values['dEu' + label + '_' + crosslabel] = dEu_ij
-        expected_values['sorting_items'] = [i for i in expected_values.keys() if i not in exclude_from_sorting]
-        return expected_values
-    
-    def check_stage(self, sequence):
-        """
-        Compute the constant matricies for each of the following sequences based on the ncdata
-        """
-        valid_seqs = [ ['EP', 'C', 'AR'], ['EPA', 'C', 'R'], ['EP', 'A', 'C', 'R'], ['A', 'EP', 'C', 'R'] ]
-        if sequnce not in valid_seqs:
-            print "Only list of valid sequnces are:"
-            print valid_seqs
-            sys.exit(1)
-        return 
-    
     def Ugen_EP_C_AR(self, nc)
         const_R_matrix = nc.u_kln[:,nc.real_R,:] - nc.u_kln[:,nc.real_alloff,:]
         const_A_matrix = nc.u_kln[:,nc.real_AR,:] - nc.u_kln[:,nc.real_R,:]
@@ -453,7 +234,7 @@ class BasisVariance:
         const_A_matrix = nc.u_kln[:,nc.real_EPCAR,:] - nc.u_kln[:,nc.real_EPCR,:]
         return const_R_matix, const_A_matrix, const_C_matrix, const_E_matrix
 
-    def buildExpected_master(self, nc, extra_states, sequence, verbose=None, bootstrap=False, basislabels=['E','P','PS','C','R','A']):
+    def buildExpected_master(self, nc, extra_lam, sequence, verbose=None, bootstrap=False):#, basislabels=['E','P','PS','C','R','A']):
         """
         This particular bit of coding will be reworked in this branch to make sure that all of the possible scheudles can be handled in a general maner with minimal user input.
         Unfortunatley, this will require reading in both the alchemy file and user input information.
@@ -468,6 +249,9 @@ class BasisVariance:
             print valid_seqs
             sys.exit(1)
         nstage = len(sequence)
+        if len(extra_lam) != nstage:
+            print "Incorrect number of extra_lam arguments. There must be at least one item per stage, even if its an empty object"
+            sys.exit(1)
         #Compute the constant matricies
         #Start with alloff
         const_U_matrix = nc.u_kln[:,nc.real_alloff,:]
@@ -514,335 +298,136 @@ class BasisVariance:
                 lambda lam: self.basis.h_e(lam)*const_E_matrix + \
                             (self.basis.h_e(lam)**2)*const_P2_matrix + \
                             self.basis.h_e(lam)*const_P_matrix + \
-                            self.basis.h_a(lam)*const_A_matrix + \
+                            nc.u_kln[:,nc.real_CAR,:],
+                lambda lam: self.basis.h_a(lam)*const_A_matrix + \
                             nc.u_kln[:,nc.real_CR,:],
                 lambda lam: lam * const_C_matrix + \
                             nc.u_kln[:,nc.real_R,:],
                 lambda lam: self.basis.h_r(lam)*const_R_matrix + \
                             nc.u_kln[:,nc.real_alloff,:]
                      ]
-            
-                           
-
-                    self.basis.h_e(lamE)*const_E_matrix + \
-                    (self.basis.h_e(lamE)**2)*const_PMEsquare_matrix + \
-                    self.basis.h_e(lamE)*const_PMEsingle_matrix + \
-                    self.basis.h_r(lamR)*const_R_matrix + \
-                    self.basis.h_a(lamA)*const_A_matrix + \
-                    nc.u_kln[:,nc.real_alloff,:]
-
-        extra_count = extra_states.nstates
-        Nbasis = len(basislabels)
-        #Generate the new u_kln
-        u_kln_new = numpy.zeros([nc.nstates + extra_count, nc.nstates + extra_count, nc.retained_iters], numpy.float64)
-        N_k_new = numpy.zeros(nc.nstates + extra_count, numpy.int32)
-        #Generate containers for all the basis functions
-        individualU_kln = {}
-        for label in basislabels:
-            individualU_kln[label] = numpy.zeros(u_kln_new.shape, numpy.float64)
-        #Copy over the original data
-        u_kln_new[:nc.nstates,:nc.nstates,:nc.retained_iters] = nc.u_kln
-        N_k_new[:nc.nstates] = nc.N_k
-        N_samples = u_kln_new.shape[2]
-        #Solve for each basis function.
-        if nc.PME_isolated:
-            if nc.real_PMEAR:
-                PMEFull = nc.u_kln[:,nc.real_PMEAR,:] - nc.u_kln[:,nc.real_CAR,:]
-                PMELess = nc.u_kln[:,nc.real_PMEsolve,:] - nc.u_kln[:,nc.real_CAR,:]
-                try:
-                    multi_lam = self.basis.multiple_lam
-                except:
-                    multi_lam = False
-                if nc.Inversion: #Will need to fix this to make more uniform later
-                    LamAtFull = self.basis.h_e_inv(nc.real_PMEFull_states[nc.real_PMEAR])
-                    LamAtLess = self.basis.h_e_inv(nc.real_PMEFull_states[nc.real_PMEsolve])
+        elif sequence is valid_seqs[3]: #a, ep, c, r
+            const_R_matix, const_A_matrix, const_C_matrix, const_E_matrix = self.Ugen_EP_A_C_R(nc)
+            Ustage = [
+                lambda lam: self.basis.h_a(lam)*const_A_matrix + \
+                            nc.u_kln[:,nc.real_EPCR,:],
+                lambda lam: self.basis.h_e(lam)*const_E_matrix + \
+                            (self.basis.h_e(lam)**2)*const_P2_matrix + \
+                            self.basis.h_e(lam)*const_P_matrix + \
+                            nc.u_kln[:,nc.real_CR,:],
+                lambda lam: lam * const_C_matrix + \
+                            nc.u_kln[:,nc.real_R,:],
+                lambda lam: self.basis.h_r(lam)*const_R_matrix + \
+                            nc.u_kln[:,nc.real_alloff,:]
+                     ]
+        else: #This sould not trip, added as safety
+            print "How did you make it here?"
+            sys.exit(1) 
+        #Compute the potential energies
+        u_klns = {}
+        N_ks = {}
+        individualU_klns = {}
+        expected_values = {}
+        for stage_index in xrange(nstage):
+            xl_stage = extra_lam[stage_index]
+            nxl = len(xl_stage)
+            stage_name = sequence[stage_index]
+            individualU_klns[stage_name] = {}
+            #Preallocate all the energy memory
+            u_klns[stage_name] = numpy.zeros([nc.nstates + xl_stage, nc.nstates + xl_stage, nc.retained_iters], numpy.float64)
+            N_samples = nc.retained_iters
+            N_ks[stage_name] = numpy.zeros(nc.nstates + xl_stage, numpy.int32)
+            #Copy over original data
+            u_klns[stage_name][:nc.nstates,:nc.nstates,:nc.retained_iters] = nc.u_kln
+            N_ks[stage_name][:nc.nstates] = nc.N_k
+            #Determine the set of changing basis functions
+            nchanging = len(sequence[stage_index])
+            basis_labels = []
+            #Generate basis function containers, run through each one
+            for label in sequence[stage_index]:
+                basis_labels.append(label)
+                if label == "P":
+                    individualU_klns[stage_name]["P"] = numpy.zeros(u_klns[stage_name].shape, numpy.float64)
+                    individualU_klns[stage_name]["P2"] = numpy.zeros(u_klns[stage_name].shape, numpy.float64)
                 else:
-                    LamAtFull = nc.real_PMEFull_states[nc.real_PMEAR]
-                    LamAtLess = nc.real_PMEFull_states[nc.real_PMEsolve]
-                if multi_lam:
-                    hless = self.basis.base_basis.h_e(LamAtLess)
-                    hfull = self.basis.base_basis.h_e(LamAtFull)
-                else:
-                    hless = self.basis.h_e(LamAtLess)
-                    hfull = self.basis.h_e(LamAtFull)
-                const_PMEsquare_matrix = (PMELess/hless - PMEFull/hfull) / (hless-hfull)
-                const_PMEsingle_matrix = PMEFull/hfull - hfull*const_PMEsquare_matrix
-            else: #Calculate by hand, add in eventually (not needed yet)
-                print "I know no other way to do this yet without a full PME defined state"
-                sys.exit(1)
-        else:
-            print "I know no other way to do this yet without isolated PME"
-            sys.exit(1)
-        const_E_matrix = nc.u_kln[:,nc.real_EAR,:] - nc.u_kln[:,nc.real_AR,:] - const_PMEsingle_matrix - const_PMEsquare_matrix
-        const_R_matrix = nc.u_kln[:,nc.real_R,:] - nc.u_kln[:,nc.real_alloff,:]
-        if multi_lam:
-            #Pull from the state where R and A are not both 1 and solve for the true const_A_matrix when RA changing without E
-            const_A_matrix = (nc.u_kln[:,nc.real_AR+1,:] - nc.u_kln[:,nc.real_alloff,:] - self.basis.base_basis.h_r(nc.real_R_states[nc.real_AR+1])*const_R_matrix)/self.basis.base_basis.h_a(nc.real_A_states[nc.real_AR+1])
-        else:
-            const_A_matrix = nc.u_kln[:,nc.real_AR,:] - nc.u_kln[:,nc.real_R,:]
-        for i in range(extra_count):
-            lamE = extra_states.E_states[i]
-            lamR = extra_states.R_states[i]
-	    lamA = extra_states.A_states[i]
-            if multi_lam:
-                #Determine effective lambda
-                effectivehE = self.basis.h_e(lamE)
-                effectivehR = self.basis.h_r(lamR)
-                effectivehA = self.basis.h_a(lamA)
-                if effectivehR < 1.0 or effectivehA < 1.0: #RA changing while E=0, capped R does not kick in until R != 1.0 and A != 1.0
-                    u_kln_new[:nc.nstates,i+nc.nstates,:] = \
-                        effectivehR*const_R_matrix + \
-                        effectivehA*const_A_matrix + \
-                        nc.u_kln[:,nc.real_alloff,:]
-                else:
-                    u_kln_new[:nc.nstates,i+nc.nstates,:] = \
-                        effectivehE*const_E_matrix + \
-                        effectivehE**2 * const_PMEsquare_matrix + \
-                        effectivehE * const_PMEsingle_matrix + \
-                        nc.u_kln[:,nc.real_alloff,:]
+                    individualU_klns[stage_name][label] = numpy.zeros(u_klns[stage_name].shape, numpy.float64)
+            #Compute energies
+            for i in xrange(nxl):
+                lam = xl_stage
+                u_klns[stage_name][:nc.nstates,i+nc.nstates,:] = Ustage[stage_index](lam)
+            for i in xrange(nc.nstates + nxl):
+                for label in sequence[stage_index]:
+                    if   label == "E":
+                        individualU_klns[stage_name][label][:nc.nstates,i,:] = const_E_matrix
+                    elif label == "P":
+                        individualU_klns[stage_name][label][:nc.nstates,i,:] = const_P_matrix
+                        individualU_klns[stage_name]["P2"][:nc.nstates,i,:] = const_P2_matrix
+                    elif label == "C":
+                        individualU_klns[stage_name][label][:nc.nstates,i,:] = const_C_matrix
+                    elif label == "A":
+                        individualU_klns[stage_name][label][:nc.nstates,i,:] = const_A_matrix
+                    elif label == "R":
+                        individualU_klns[stage_name][label][:nc.nstates,i,:] = const_R_matrix
+                    else:
+                        print "Seriously, how did you make it here?"
+                        sys.exit(1)
+            if bootstrap:
+                u_kln_boot = numpy.zeros(u_klns[stage_name].shape)
+                individualU_klns_boot = {}
+                for label in individualU_klns[stage_name].keys():
+                    individualU_klns_boot[label] = numpy.zeros(u_kln_new.shape, numpy.float64)
+                for state in xrange(u_kln_boot.shape[0]):
+                    samplepool = random_integers(0,N_samples-1,N_samples) #Pull the indicies for the sample space, N number of times
+                    for i in xrange(len(samplepool)): #Had to put this in its own loop as u_kln_new[state,:,samplepool] was returning a NxK matrix instead of a KxN
+                        u_kln_boot[state,:,i] = u_klns[stage_name][state,:,samplepool[i]]
+                        for label in individualU_klns[stage_name].keys():
+                            individualU_kln_boot[label][state,:,i] = individualU_klns[stage_name][label][state,:,samplepool[i]]
+                #Copy over shuffled data
+                u_klns[stage_name] = u_kln_boot
+                for label in individualU_klns[stage_name].keys:
+                    individualU_klns[stage_name][label] = individualU_kln_boot[label]
+            basis_labels = individualU_klns[stage_name].keys()
+            Nbasis = len(basis_labels)
+            #Prep MBAR
+            if nc.mbar_ready:
+                mbar = MBAR(u_klns[stage_name], N_ks[stage_name], verbose = verbose, method = 'adaptive', initial_f_k=numpy.concatenate((nc.mbar.f_k,numpy.zeros(nxl))))
             else:
-                u_kln_new[:nc.nstates,i+nc.nstates,:] = \
-                    self.basis.h_e(lamE)*const_E_matrix + \
-                    (self.basis.h_e(lamE)**2)*const_PMEsquare_matrix + \
-                    self.basis.h_e(lamE)*const_PMEsingle_matrix + \
-                    self.basis.h_r(lamR)*const_R_matrix + \
-                    self.basis.h_a(lamA)*const_A_matrix + \
-                    nc.u_kln[:,nc.real_alloff,:]
-        #pdb.set_trace()
-        for i in range(extra_count+nc.nstates):
-            if 'e' in basislabels: individualU_kln['e'][:nc.nstates,i,:] = const_E_matrix
-            if 'pmes' in basislabels: individualU_kln['pmes'][:nc.nstates,i,:] = const_PMEsingle_matrix
-            if 'pmesq' in basislabels: individualU_kln['pmesq'][:nc.nstates,i,:] = const_PMEsquare_matrix
-            if 'r' in basislabels: individualU_kln['r'][:nc.nstates,i,:] = const_R_matrix
-            if 'a' in basislabels: individualU_kln['a'][:nc.nstates,i,:] = const_A_matrix
-        #Handle bootstrap
-        if bootstrap:
-            u_kln_boot = numpy.zeros(u_kln_new.shape)
-            individualU_kln_boot = {}
-            for label in basislabels:
-                individualU_kln_boot[label] = numpy.zeros(u_kln_new.shape, numpy.float64)
-            for state in range(u_kln_boot.shape[0]):
-                samplepool = random_integers(0,N_samples-1,N_samples) #Pull the indicies for the sample space, N number of times
-                for i in xrange(len(samplepool)): #Had to put this in its own loop as u_kln_new[state,:,samplepool] was returning a NxK matrix instead of a KxN
-                    u_kln_boot[state,:,i] = u_kln_new[state,:,samplepool[i]]
-                    for label in basislabels:
-                        individualU_kln_boot[label][state,:,i] = individualU_kln[label][state,:,samplepool[i]]
-            #Copy over shuffled data
-            u_kln_new = u_kln_boot
-            for label in basislabels:
-                individualU_kln[label] = individualU_kln_boot[label]
-        #Prep MBAR
-        if nc.mbar_ready:
-            mbar = MBAR(u_kln_new, N_k_new, verbose = verbose, method = 'adaptive', initial_f_k=numpy.concatenate((nc.mbar.f_k,numpy.zeros(extra_count))))
-        else:
-            mbar = MBAR(u_kln_new, N_k_new, verbose = verbose, method = 'adaptive')
-        expected_values = {
-            'labels':basislabels, 
-            'Nbasis':Nbasis, 
-            'dswitche':self.basis.dh_e, 
-            'dswitchpmes':self.basis.dh_e, 
-            'dswitchpmesq':lambda X: 2*self.basis.h_e(X)*self.basis.dh_e(X),
-            'dswitchr':self.basis.dh_r,
-            'dswitcha':self.basis.dh_a}
-        exclude_from_sorting = expected_values.keys()
-        #Generate expectations
-        for i in range(Nbasis):
-            label = basislabels[i]
-            (Eui, dEui) = mbar.computeExpectations(individualU_kln[label])
-            (Eui2, dEui2) = mbar.computeExpectations(individualU_kln[label]**2)
-            expected_values['var_u'+label] = Eui2 - Eui**2
-            dvar_ui = numpy.sqrt(dEui2**2 + 2*(Eui*dEui)**2)
-            expected_values['dvar_u'+label] = dvar_ui
-            expected_values['Eu'+label] = Eui
-            expected_values['dEu'+label] = dEui
-            expected_values['Eu'+label + '2'] = Eui2
-            expected_values['dEu'+label + '2'] = dEui2
-            for j in range(i+1,Nbasis): #Compute the cross terms, no need to run i=j since that was handled above
-                crosslabel = basislabels[j]
-                (Eu_ij, dEu_ij) = mbar.computeExpectations(individualU_kln[label] * individualU_kln[crosslabel])
-                expected_values['Eu' + label + '_' + crosslabel] = Eu_ij
-                expected_values['dEu' + label + '_' + crosslabel] = dEu_ij
-        expected_values['sorting_items'] = [i for i in expected_values.keys() if i not in exclude_from_sorting]
+                mbar = MBAR(u_klns[stage_name], N_ks[stage_name], verbose = verbose, method = 'adaptive')
+            expected_values[stage_name] = {'labels' = basis_labels}
+            for label in basis_labels:
+                 if   label == "E":
+                    expected_values[stage_name]["dswitch" + label] = self.basis.dh_e
+                elif label == "P":
+                    expected_values[stage_name]["dswitch" + label] = self.basis.dh_e
+                elif label == "P2":
+                    expected_values[stage_name]["dswitch" + label] = lambda X: 2*self.basis.h_e(X)*self.basis.dh_e(X)
+                elif label == "C":
+                    expected_values[stage_name]["dswitch" + label] = lambda X: X
+                elif label == "A":
+                    expected_values[stage_name]["dswitch" + label] = self.basis.dh_a
+                elif label == "R":
+                    expected_values[stage_name]["dswitch" + label] = self.basis.dh_r
+            exclude_from_sorting = expected_values[stage_name].keys() 
+            #Generate Expectations
+            for i in xrange(Nbasis):
+                label = basis_labels[i]
+                (Eui, dEui) = mbar.computeExpectations(individualU_klns[stage_name][label])
+                (Eui2, dEui2) = mbar.computeExpectations(individualU_klns[stage_name][label]**2)
+                epected_values[stage_name]['var_u'+label] = Eui2 - Eui**2
+                dvar_ui = numpy.sqrt(dEui2**2 + 2*(Eui*dEui)**2)
+                expected_values[stage_name]['dvar_u'+label] = dvar_ui
+                expected_values[stage_name]['Eu'+label] = Eui
+                expected_values[stage_name]['dEu'+label] = dEui
+                expected_values[stage_name]['Eu'+label + '2'] = Eui2
+                expected_values[stage_name]['dEu'+label + '2'] = dEui2
+                for j in range(i+1,Nbasis): #Compute the cross terms, no need to run i=j since that was handled above
+                    crosslabel = basis_labels[j]
+                    (Eu_ij, dEu_ij) = mbar.computeExpectations(individualU_klns[stage_name][label] * individualU_klns[stage_name][crosslabel])
+                    expected_values[stage_name]['Eu' + label + '_' + crosslabel] = Eu_ij
+                    expected_values[stage_name]['dEu' + label + '_' + crosslabel] = dEu_ij
+                expected_values[stage_name]['sorting_items'] = [i for i in expected_values[stage_name].keys() if i not in exclude_from_sorting]
         return expected_values
-
-    def buildExpectations_Staged(self, nc, basislabels, u_kln_new, N_k_new, verbose=None)
-        if verbose is None:
-            verbose=self.default_verbosity
-        expected_values = {
-            'labels':basislabels,
-            'Nbasis':len(basislabels),i}
-        if 'P' in basislabels:
-            expected_values['dswitchP'] = self.basis.dh_e
-            expected_values['dswitchP2'] = lambda X: 2*self.basis.h_e(X) * self.basis.dh_e
-        if 'E' in basislabels:
-            expected_values[
-        if 'C' in basislabels:
-        if 'R' in basislabels:
-        if 'A' in basislabels:
-        
-        
-    #---------------------------------------------------------------------------------------------
-
-    def buildExpected_electro(self, nc, extra_E, verbose=None, bootstrap=False, basis_derivatives=None):
-        if verbose is None:
-            verbose = self.default_verbosity
-        extra_count = len(extra_E)
-        if basis_derivatives is None: #Check to see if we have accepted a different basis function to compute derivatives from
-            #This operation most helpful for inverse basis function variances
-            basis_derivatives = self.basis #Default to system basis function
-        u_kln_new = numpy.zeros([nc.nstates + extra_count, nc.nstates + extra_count, nc.retained_iters], numpy.float64)
-        N_k_new = numpy.zeros(nc.nstates + extra_count, numpy.int32)
-        basislabels = ['e','pmes','pmesq']
-        Nbasis = len(basislabels)
-        individualU_kln = {}
-        for label in basislabels:
-            individualU_kln[label] = numpy.zeros(u_kln_new.shape, numpy.float64)
-        #Copy over the original data
-        u_kln_new[:nc.nstates,:nc.nstates,:nc.retained_iters] = nc.u_kln
-        N_k_new[:nc.nstates] = nc.N_k
-        N_samples = u_kln_new.shape[2]
-        if nc.PME_isolated:
-            if nc.real_PMEAR:
-                #Calculate the square and nonsquare parts of the PME equation TODO: Find a way to have numpy solve this, it is currently manually solved
-                PMEFull = nc.u_kln[:,nc.real_PMEAR,:] - nc.u_kln[:,nc.real_AR,:]
-                PMELess = nc.u_kln[:,nc.real_PMEsolve,:] - nc.u_kln[:,nc.real_AR,:]
-                if nc.Inversion: #Will need to fix this to make more uniform later
-                    LamAtFull = self.basis.h_e_inv(nc.real_PMEFull_states[nc.real_PMEAR])
-                    LamAtLess = self.basis.h_e_inv(nc.real_PMEFull_states[nc.real_PMEsolve])
-                else:
-                    LamAtFull = nc.real_PMEFull_states[nc.real_PMEAR]
-                    LamAtLess = nc.real_PMEFull_states[nc.real_PMEsolve]
-                hless = self.basis.h_e(LamAtLess)
-                hfull = self.basis.h_e(LamAtFull)
-                const_PMEsquare_matrix = (PMELess/hless - PMEFull/hfull) / (hless-hfull)
-                const_PMEsingle_matrix = PMEFull/hfull - hfull*const_PMEsquare_matrix
-        const_E_matrix = nc.u_kln[:,nc.real_EAR,:] - nc.u_kln[:,nc.real_AR,:] - const_PMEsingle_matrix - const_PMEsquare_matrix
-        try: #Sanity check 
-            nc.real_PMEAR #Variable exists
-        except:
-            nc.real_PMEAR = False
-        if not nc.real_PMEAR:
-            Ediff = const_E_matrix - const_E_check
-            tol = 1E-5
-            #Check if its within a tolerance, should be machine precision.
-            if not numpy.all(Ediff < tol): 
-                print "Warrning! Constant E matrix from linear algebra != Constant E matrix derived"
-                print "Max Error: %f" % Ediff.max()
-        #Checks to make sure I am getting the results I expect
-        #deltaU = numpy.zeros(nc.u_kln.shape)
-        #deltaU2 = numpy.zeros(nc.u_kln.shape)
-        #u_ljfree = numpy.zeros(nc.u_kln.shape)
-        #for l in xrange(len(nc.real_E_states)):
-            #lam = nc.real_E_states[l]
-            #deltaU[:,l,:] = self.basis.h_e(lam)*const_E_matrix + self.basis.h_e(lam)*const_PMEsingle_matrix + (self.basis.h_e(lam)**2)*const_PMEsquare_matrix + nc.u_kln[:,nc.real_AR,:] - nc.u_kln[:,l,:]
-            #u_ljfree[:,l,:] = nc.u_kln[:,l,:] - nc.u_kln[:,nc.real_AR,:]
-        for i in range(extra_count):
-            lamE = extra_E[i]
-            u_kln_new[:nc.nstates,i+nc.nstates,:] = self.basis.h_e(lamE)*const_E_matrix + (self.basis.h_e(lamE)**2)*const_PMEsquare_matrix + self.basis.h_e(lamE)*const_PMEsingle_matrix + nc.u_kln[:,nc.real_AR,:]
-        for i in range(extra_count+nc.nstates):
-            individualU_kln['e'][:nc.nstates,i,:] = const_E_matrix
-            individualU_kln['pmes'][:nc.nstates,i,:] = const_PMEsingle_matrix
-            individualU_kln['pmesq'][:nc.nstates,i,:] = const_PMEsquare_matrix
-        #Shuffle all the states if bootstrap is on
-        if bootstrap:
-            u_kln_boot = numpy.zeros(u_kln_new.shape)
-            individualU_kln_boot = {}
-            for label in basislabels:
-                individualU_kln_boot[label] = numpy.zeros(u_kln_new.shape, numpy.float64)
-            for state in range(u_kln_boot.shape[0]):
-                samplepool = random_integers(0,N_samples-1,N_samples) #Pull the indicies for the sample space, N number of times
-                for i in xrange(len(samplepool)): #Had to put this in its own loop as u_kln_new[state,:,samplepool] was returning a NxK matrix instead of a KxN
-                    u_kln_boot[state,:,i] = u_kln_new[state,:,samplepool[i]]
-                    for label in basislabels:
-                        individualU_kln_boot[label][state,:,i] = individualU_kln[label][state,:,samplepool[i]]
-            #Copy over shuffled data
-            u_kln_new = u_kln_boot
-            for label in basislabels:
-                individualU_kln[label] = individualU_kln_boot[label]
-        if nc.mbar_ready:
-            mbar = MBAR(u_kln_new, N_k_new, verbose = verbose, method = 'adaptive', initial_f_k=numpy.concatenate((nc.mbar.f_k,numpy.zeros(extra_count))))
-        else:
-            mbar = MBAR(u_kln_new, N_k_new, verbose = verbose, method = 'adaptive')
-        expected_values = {'labels':basislabels, 'Nbasis':Nbasis, 'dswitche':basis_derivatives.dh_e, 'dswitchpmes':basis_derivatives.dh_e, 'dswitchpmesq':lambda X: 2*basis_derivatives.h_e(X)*basis_derivatives.dh_e(X)}
-        exclude_from_sorting = expected_values.keys()
-        for i in range(Nbasis):
-            label = basislabels[i]
-            (Eui, dEui) = mbar.computeExpectations(individualU_kln[label])
-            (Eui2, dEui2) = mbar.computeExpectations(individualU_kln[label]**2)
-            expected_values['var_u'+label] = Eui2 - Eui**2
-            dvar_ui = numpy.sqrt(dEui2**2 + 2*(Eui*dEui)**2)
-            expected_values['dvar_u'+label] = dvar_ui
-            expected_values['Eu'+label] = Eui
-            expected_values['dEu'+label] = dEui
-            expected_values['Eu'+label + '2'] = Eui2
-            expected_values['dEu'+label + '2'] = dEui2
-            for j in range(i+1,Nbasis): #Compute the cross terms, no need to run i=j since that was handled above
-                crosslabel = basislabels[j]
-                (Eu_ij, dEu_ij) = mbar.computeExpectations(individualU_kln[label] * individualU_kln[crosslabel])
-                expected_values['Eu' + label + '_' + crosslabel] = Eu_ij
-                expected_values['dEu' + label + '_' + crosslabel] = dEu_ij
-        expected_values['sorting_items'] = [i for i in expected_values.keys() if i not in exclude_from_sorting]
-        return expected_values
-
-    def buildExpected(self, nc, extra_R, extra_A, verbose=None, return_second=False, bootstrap=False):
-        if verbose is None:
-            verbose = self.default_verbosity
-        #Build the expected values based on the u_kln data and the extra_lambda you want filled in, this is based on my work in analyze-expected.py
-        extra_count = len(extra_R)
-        #Build the new u_kln and N_k
-        u_kln_new = numpy.zeros([nc.nstates + extra_count, nc.nstates + extra_count, nc.retained_iters], numpy.float64)
-        N_k_new = numpy.zeros(nc.nstates + extra_count, numpy.int32)
-        ua_kln = numpy.zeros(u_kln_new.shape, numpy.float64) #Making 2 more expectations to find for the sake of testing optimal path creation
-        ur_kln = numpy.zeros(u_kln_new.shape, numpy.float64)
-        #Copy over the original data
-        u_kln_new[:nc.nstates,:nc.nstates,:nc.retained_iters] = nc.u_kln
-        N_k_new[:nc.nstates] = nc.N_k
-        N_samples = u_kln_new.shape[2]
-        #Solve for the constant vectors
-        const_E_matrix = nc.u_kln[:,nc.real_EAR,:] - nc.u_kln[:,nc.real_AR,:]
-        const_R_matrix = nc.u_kln[:,nc.real_R,:] - nc.u_kln[:,nc.real_alloff,:]
-        const_A_matrix = nc.u_kln[:,nc.real_AR,:] - nc.u_kln[:,nc.real_R,:]
-        #Create the new data
-        for i in range(extra_count):
-            lamR = extra_R[i]
-            lamA = extra_A[i]
-            u_kln_new[:nc.nstates,i+nc.nstates,:] = self.basis.h_r(lamR)*const_R_matrix + self.basis.h_a(lamA)*const_A_matrix + nc.u_kln[:,nc.real_alloff,:]
-        for i in range(extra_count+nc.nstates):
-            ur_kln[:nc.nstates,i,:] = const_R_matrix
-            ua_kln[:nc.nstates,i,:] = const_A_matrix
-        #Shuffle all the states if bootstrap is on
-        if bootstrap:
-            u_kln_boot = numpy.zeros(u_kln_new.shape)
-            ua_kln_boot = numpy.zeros(ua_kln.shape, numpy.float64) #Making 2 more expectations to find for the sake of testing optimal path creation
-            ur_kln_boot = numpy.zeros(ur_kln.shape, numpy.float64)
-            for state in range(u_kln_boot.shape[0]):
-                samplepool = random_integers(0,N_samples-1,N_samples) #Pull the indicies for the sample space, N number of times
-                for i in xrange(len(samplepool)): #Had to put this in its own loop as u_kln_new[state,:,samplepool] was returning a NxK matrix instead of a KxN
-                    u_kln_boot[state,:,i] = u_kln_new[state,:,samplepool[i]]
-                    ur_kln_boot[state,:,i] = ur_kln[state,:,samplepool[i]]
-                    ua_kln_boot[state,:,i] = ua_kln[state,:,samplepool[i]]
-            #Copy over shuffled data
-            u_kln_new = u_kln_boot
-            ur_kln = ur_kln_boot
-            ua_kln = ua_kln_boot
-        #Run MBAR
-        mbar = MBAR(u_kln_new, N_k_new, verbose = verbose, method = 'adaptive')
-        (Eur, dEur) = mbar.computeExpectations(ur_kln)
-        (Eua, dEua) = mbar.computeExpectations(ua_kln)
-        (Eur2, dEur2) = mbar.computeExpectations(ur_kln**2)
-        (Eua2, dEua2) = mbar.computeExpectations(ua_kln**2)
-        (Eura, dEura) = mbar.computeExpectations(ur_kln * ua_kln)
-        var_ur = Eur2 - Eur**2
-        dvar_ur = numpy.sqrt(dEur2**2 + 2*(Eur*dEur)**2)
-        var_ua = Eua2 - Eua**2
-        dvar_ua = numpy.sqrt(dEua2**2 + 2*(Eua*dEua)**2)
-        #Construct dictionary
-        expected_values = {'Eur':Eur, 'Eua':Eua, 'Eura':Eura, 'var_ur':var_ur, 'var_ua':var_ua, 'dEur':dEur, 'dEua':dEua, 'dEura':dEura, 'dvar_ur':dvar_ur, 'dvar_ua':dvar_ua}
-        if return_second:
-            (EU, dEU) = mbar.computeExpectations(ur_kln + ua_kln)
-            expected_values['EU'] = EU
-            expected_values['dEU'] = dEU
-        return expected_values
+             
     #---------------------------------------------------------------------------------------------
 
     def calcdhdl(self, expected, basis, lam_r, lam_a, return_error=False):
