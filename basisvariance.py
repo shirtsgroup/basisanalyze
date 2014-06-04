@@ -504,6 +504,7 @@ class BasisVariance:
                 bootstrap_integrands = {}
                 bootstrap_dhdl = {}
                 bootstrap_error = {}
+                bootstrap_dhdl_error = {}
                 for stage in sequence:
                     #Deterimine shape of output matrix [le,bootstrap_count]
                     bootstrap_integrands[stage] = numpy.zeros([Nlam,bootstrap_count])
@@ -527,13 +528,17 @@ class BasisVariance:
                     integrand[stage]['plus'] = integrand[stage]['natural'] + bootstrap_error[stage]
                     integrand[stage]['minus'] = integrand[stage]['natural'] - bootstrap_error[stage]
                     integrand[stage]['bootstrap_error'] = bootstrap_error[stage]
+                    if calculatedhdl:
+                        bootstrap_dhdl_error[stage] = numpy.sqrt(numpy.var(bootstrap_dhdl[stage][:,:], axis=1))
+                        dhdl[stage]['plus'] = dhdl[stage]['natural'] + bootstrap_dhdl_error[stage]
+                        dhdl[stage]['minus'] = dhdl[stage]['natural'] - bootstrap_dhdl_error[stage]
+                        dhdl[stage]['bootstrap_error'] = bootstrap_dhdl_error[stage]
             if calculatedhdl:
                 return integrand,variance,dhdl
             else:
                 return integrand,variance
         else:
             return expectations
-
 
     def inv_var(self, being_predicted_basis, predicted_lam_r, predicted_lam_a, return_error=False, calculatedhdl=False, verbose=None, bootstrap_error=False, bootstrap_count=200):
         if verbose is None:
