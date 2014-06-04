@@ -117,7 +117,7 @@ class BasisVariance:
             else:
                 return
 
-    def buildExpected_master(self, nc, extra_lam, sequence, verbose=None, bootstrap=False):#, basislabels=['E','P','PS','C','R','A']):
+    def buildExpected_master(self, nc, extra_lam, sequence, verbose=None, bootstrap=False):
         """
         This particular bit of coding will be reworked in this branch to make sure that all of the possible scheudles can be handled in a general maner with minimal user input.
         Unfortunatley, this will require reading in both the alchemy file and user input information.
@@ -137,10 +137,18 @@ class BasisVariance:
         if verbose: print "Generating constant matricies..."
         const_U_matrix = nc.u_kln[:,nc.real_alloff,:]
         #Compute PME
-        PMEFull = nc.u_kln[:,nc.real_PCAR,:] - nc.u_kln[:,nc.real_CAR,:]
-        PMELess = nc.u_kln[:,nc.real_Psolve,:] - nc.u_kln[:,nc.real_CAR,:]
-        LamAtFull = nc.real_PMEFull_states[nc.real_PCAR]
-        LamAtLess = nc.real_PMEFull_states[nc.real_Psolve]
+        if nc.real_PCAR is not None: #Trap when A is decoupled first
+            noEstate = nc.real_CAR
+            Pstate = nc.real_PCAR
+            Psolve = nc.real_Psolve
+        else:
+            noEstate = nc.real_CR
+            Pstate = nc.real_PCR
+            Psolve = nc.real_Psolve2
+        PMEFull = nc.u_kln[:,Pstate,:] - nc.u_kln[:,noEstate,:]
+        PMELess = nc.u_kln[:,Psolve,:] - nc.u_kln[:,noEstate,:]
+        LamAtFull = nc.real_PMEFull_states[Pstate]
+        LamAtLess = nc.real_PMEFull_states[Psolve]
         hless = self.basis.h_e(LamAtLess)
         hfull = self.basis.h_e(LamAtFull)
         const_P2_matrix = (PMELess/hless - PMEFull/hfull) / (hless-hfull)
@@ -188,7 +196,7 @@ class BasisVariance:
                             nc.u_kln[:,nc.real_alloff,:]
                      ]
         elif sequence == valid_seqs[3]: #a, ep, c, r
-            const_R_matrix, const_A_matrix, const_C_matrix, const_E_matrix = self.Ugen_EP_A_C_R(nc)
+            const_R_matrix, const_A_matrix, const_C_matrix, const_E_matrix = self.Ugen_A_EP_C_R(nc)
             Ustage = [
                 lambda lam: self.basis.h_a(lam)*const_A_matrix + \
                             nc.u_kln[:,nc.real_EPCR,:],
@@ -468,7 +476,7 @@ class BasisVariance:
             stage_ranges = { 'A':states[nc.real_EPCAR:nc.real_EPCR+1], 'EP':states[nc.real_EPCR:nc.real_CR+1], 'C':states[nc.real_CR:nc.real_R+1], 'R':states[nc.real_R:nc.real_alloff+1] }
             sampled = { 'A':nc.real_A_states[stage_ranges['A']], 'EP':nc.real_E_states[stage_ranges['EP']], 'C':nc.real_C_states[stage_ranges['C']], 'R':nc.real_R_states[stage_ranges['R']] }
             extra0 = self.seqGen(sampled['A']) #Stage 0: EPCAR -> EPCR
-            extra1 = self.seqGen(smapled['EP']) #Stage 1: EPCR -> CR
+            extra1 = self.seqGen(sampled['EP']) #Stage 1: EPCR -> CR
             extra2 = self.seqGen(sampled['C']) #Stage 2: CR -> R
             extra3 = self.seqGen(sampled['R']) #Stage 3: R -> off
             extra_lam = {'A':extra0, 'EP':extra1, 'C':extra2, 'R':extra3}

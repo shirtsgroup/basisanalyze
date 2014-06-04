@@ -715,6 +715,11 @@ class ncdata:
                 self.real_Psolve = int(indicies[self.logical_all_and(decoupled['E'], numpy.invert(coupled['P']), numpy.invert(decoupled['P']), coupled['C'], coupled['A'], coupled['R']) ])
             except TypeError:
                 self.real_Psolve = None
+            try: # Psolve2
+                #Where E is off, RC are coupled, and P is not (0 or 1)
+                self.real_Psolve2 = int(indicies[self.logical_all_and(decoupled['E'], numpy.invert(coupled['P']), numpy.invert(decoupled['P']), coupled['C'], decoupled['A'], coupled['R']) ])
+            except TypeError:
+                self.real_Psolve2 = None
         else:
             raise Exception('Need to have an isolated PME state')
             sys.exit(1)
