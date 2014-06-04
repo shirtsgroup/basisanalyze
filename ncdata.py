@@ -651,7 +651,7 @@ class ncdata:
         indicies = numpy.array(range(len(real_E_states)))
         #Determine coupled and decoupled, Inversion not coded yet
         labels = ['R','A','E','C','P']
-        basis = {'R':real_R_states, 'A':real_A_states, 'E':real_E_states, 'C':real_C_states, 'P':real_PMEFull_states}
+        basis = {'R':self.real_R_states, 'A':self.real_A_states, 'E':self.real_E_states, 'C':self.real_C_states, 'P':self.real_PMEFull_states}
         coupled = {}
         decoupled = {}
         for label in labels:
@@ -667,52 +667,52 @@ class ncdata:
         if self.PME_isolated: #Logic to solve for isolated PME case
             #Figure out the Fully coupled state, EPCAR
             try:
-                self.real_EPCAR = int(indicies[self.logical_all_and(coupled['E'], coupled['P'], coupled['C'], coupled['A'], coupled['R'])
+                self.real_EPCAR = int(indicies[self.logical_all_and(coupled['E'], coupled['P'], coupled['C'], coupled['A'], coupled['R']) ])
             except TypeError:
                 self.real_EPCAR = None
             #PCAR
             try:
-                self.real_PCAR = int(indicies[self.logical_all_and(decoupled['E'], coupled['P'], coupled['C'], coupled['A'], coupled['R'])
+                self.real_PCAR = int(indicies[self.logical_all_and(decoupled['E'], coupled['P'], coupled['C'], coupled['A'], coupled['R']) ])
             except TypeError:
                 self.real_PCAR = None
             #EPCR, needed in a particular sequence
             try:
-                self.real_EPCR = int(indicies[self.logical_all_and(coupled['E'], coupled['P'], coupled['C'], decoupled['A'], coupled['R'])
+                self.real_EPCR = int(indicies[self.logical_all_and(coupled['E'], coupled['P'], coupled['C'], decoupled['A'], coupled['R']) ])
             except TypeError:
                 self.real_EPCR = None
             #PCR, needed for same particular sequence
             try:
-                self.real_PCR = int(indicies[self.logical_all_and(decoupled['E'], coupled['P'], coupled['C'], decoupled['A'], coupled['R'])
+                self.real_PCR = int(indicies[self.logical_all_and(decoupled['E'], coupled['P'], coupled['C'], decoupled['A'], coupled['R']) ])
             except TypeError:
                 self.real_PCR = None
             #CAR
             try:
-                self.real_CAR = int(indicies[self.logical_all_and(decoupled['E'], decoupled['P'], coupled['C'], coupled['A'], coupled['R'])
+                self.real_CAR = int(indicies[self.logical_all_and(decoupled['E'], decoupled['P'], coupled['C'], coupled['A'], coupled['R']) ])
             except TypeError:
                 self.real_CAR = None
             #AR
             try:
-                self.real_AR = int(indicies[self.logical_all_and(decoupled['E'], decoupled['P'], decoupled['C'], coupled['A'], coupled['R'])
+                self.real_AR = int(indicies[self.logical_all_and(decoupled['E'], decoupled['P'], decoupled['C'], coupled['A'], coupled['R']) ])
             except TypeError:
                 self.real_AR = None
             #R
             try:
-                self.real_R = int(indicies[self.logical_all_and(decoupled['E'], decoupled['P'], decoupled['C'], decoupled['A'], coupled['R'])
+                self.real_R = int(indicies[self.logical_all_and(decoupled['E'], decoupled['P'], decoupled['C'], decoupled['A'], coupled['R']) ][0]) #!!! the [0] is a quick fix
             except TypeError:
                 self.real_R = None
             #CR
             try:
-                self.real_CR = int(indicies[self.logical_all_and(decoupled['E'], decoupled['P'], decoupled['C'], coupled['A'], decoupled['R'])
+                self.real_CR = int(indicies[self.logical_all_and(decoupled['E'], decoupled['P'], coupled['C'], decoupled['A'], coupled['R']) ])
             except TypeError:
                 self.real_CR = None
             #Alloff
             try:
-                self.real_alloff = int(indicies[self.logical_all_and(decoupled['E'], decoupled['P'], decoupled['C'], decoupled['A'], decoupled['R'])
+                self.real_alloff = int(indicies[self.logical_all_and(decoupled['E'], decoupled['P'], decoupled['C'], decoupled['A'], decoupled['R']) ])
             except TypeError:
                 self.real_alloff = None
             try: # Psolve
                 #Where E is off, ARC are coupled, and P is not (0 or 1)
-                self.real_Psolve = int(indicies[self.logical_all_and(decoupled['E'], numpy.inverse(coupled['P']), numpy.inverse(decoupled['P']), coupled['C'], coupled['A'], coupled['R'])
+                self.real_Psolve = int(indicies[self.logical_all_and(decoupled['E'], numpy.invert(coupled['P']), numpy.invert(decoupled['P']), coupled['C'], coupled['A'], coupled['R']) ])
             except TypeError:
                 self.real_Psolve = None
         else:
@@ -731,10 +731,14 @@ class ncdata:
         return
 
     def compute_mbar(self):
-        self.mbar = MBAR(self.u_kln, self.N_k, verbose = self.verbose, method = 'adaptive')
+        if self.initial_f_k is not None:
+            self.mbar = MBAR(self.u_kln, self.N_k, verbose = self.verbose, method = 'adaptive', initial_f_k=self.initial_f_k)
+        else:
+            self.mbar = MBAR(self.u_kln, self.N_k, verbose = self.verbose, method = 'adaptive')
+          
         self.mbar_ready = True
 
-    def __init__(self, phase, source_directory, verbose=False, real_R_states = None, real_A_states = None, real_E_states = None, real_C_states = None, compute_mbar = False, alchemy_source = None, save_equil_data=False, save_prefix="", run_checks=False, nequil=None, manual_subsample=False, u_kln_input=None, temp_in=298):
+    def __init__(self, phase, source_directory, verbose=False, real_R_states = None, real_A_states = None, real_E_states = None, real_C_states = None, compute_mbar = False, alchemy_source = None, save_equil_data=False, save_prefix="", run_checks=False, nequil=None, manual_subsample=False, u_kln_input=None, temp_in=298, initial_f_k=None):
         self.phase = phase
         self.verbose = verbose
         if type(save_prefix) is not str: save_prefix = ""
@@ -753,6 +757,7 @@ class ncdata:
             nequil = int(nequil)
         self.nequil = nequil
         self.manual_subsample = manual_subsample
+        self.initial_f_k = initial_f_k
 
         if u_kln_input is not None:
             self.u_kln_raw = u_kln_input 
@@ -851,3 +856,5 @@ class ncdata:
         
         return
 
+if __name__ == "__main__":
+    print "Syntax good, boss!"
