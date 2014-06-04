@@ -209,36 +209,36 @@ class BasisVariance:
         #Reverse sequence to return a 0 -> 1 order
         return all_ndx_sorted[::-1]
 
-    def Ugen_EP_C_AR(self, nc)
+    def Ugen_EP_C_AR(self, nc):
         const_R_matrix = nc.u_kln[:,nc.real_R,:] - nc.u_kln[:,nc.real_alloff,:]
         const_A_matrix = nc.u_kln[:,nc.real_AR,:] - nc.u_kln[:,nc.real_R,:]
         const_C_matrix = nc.u_kln[:,nc.real_CAR,:] - nc.u_kln[:,nc.real_AR,:]
         const_E_matrix = nc.u_kln[:,nc.real_EPCAR,:] - nc.u_kln[:,nc.real_PCAR,:]
         return const_R_matix, const_A_matrix, const_C_matrix, const_E_matrix
-    def Ugen_EPA_C_R(self, nc)
+    def Ugen_EPA_C_R(self, nc):
         const_R_matrix = nc.u_kln[:,nc.real_R,:] - nc.u_kln[:,nc.real_alloff,:]
         const_C_matrix = nc.u_kln[:,nc.real_CR,:] - nc.u_kln[:,nc.real_R,:]
         const_A_matrix = nc.u_kln[:,nc.real_CAR,:] - nc.u_kln[:,nc.real_CR,:]
         const_E_matrix = nc.u_kln[:,nc.real_EPCAR,:] - nc.u_kln[:,nc.real_PCAR,:]
         return const_R_matix, const_A_matrix, const_C_matrix, const_E_matrix
-    def Ugen_EP_A_C_R(self, nc)
+    def Ugen_EP_A_C_R(self, nc):
         const_R_matrix = nc.u_kln[:,nc.real_R,:] - nc.u_kln[:,nc.real_alloff,:]
         const_C_matrix = nc.u_kln[:,nc.real_CR,:] - nc.u_kln[:,nc.real_R,:]
         const_A_matrix = nc.u_kln[:,nc.real_CAR,:] - nc.u_kln[:,nc.real_CR,:]
         const_E_matrix = nc.u_kln[:,nc.real_EPCAR,:] - nc.u_kln[:,nc.real_PCAR,:]
         return const_R_matix, const_A_matrix, const_C_matrix, const_E_matrix
-    def Ugen_A_EP_C_R(self, nc)
+    def Ugen_A_EP_C_R(self, nc):
         const_R_matrix = nc.u_kln[:,nc.real_R,:] - nc.u_kln[:,nc.real_alloff,:]
         const_C_matrix = nc.u_kln[:,nc.real_CR,:] - nc.u_kln[:,nc.real_R,:]
         const_E_matrix = nc.u_kln[:,nc.real_EPCR,:] - nc.u_kln[:,nc.real_PCR,:]
         const_A_matrix = nc.u_kln[:,nc.real_EPCAR,:] - nc.u_kln[:,nc.real_EPCR,:]
         return const_R_matix, const_A_matrix, const_C_matrix, const_E_matrix
 
-    def checkSequence(self, seq=None)
+    def checkSequence(self, seq=None):
         valid_seqs = [ ['EP', 'C', 'AR'], ['EPA', 'C', 'R'], ['EP', 'A', 'C', 'R'], ['A', 'EP', 'C', 'R'] ]
-        if seq is None
+        if seq is None:
             return valid_seqs
-        else
+        else:
             if seq not in valid_seqs:
                 print "Only list of valid sequnces are:"
                 print valid_seqs
@@ -274,7 +274,7 @@ class BasisVariance:
         const_P2_matrix = (PMELess/hless - PMEFull/hfull) / (hless-hfull)
         const_P_matrix = PMEFull/hfull - hfull*const_PMEsquare_matrix
         #Compute the rest of the basis based on sequence
-        if sequence is valid_seqs[0] #ep c ar
+        if sequence is valid_seqs[0]: #ep c ar
             const_R_matix, const_A_matrix, const_C_matrix, const_E_matrix = self.Ugen_EP_C_AR(nc)
             #Assign energy evaluation stages
             Ustage = [
@@ -404,8 +404,8 @@ class BasisVariance:
                 mbar = MBAR(u_klns[stage_name], N_ks[stage_name], verbose = verbose, method = 'adaptive')
             expected_values[stage_name] = {'labels':basis_labels, 'Nbasis':Nbasis}
             for label in basis_labels:
-                 if   label == "E":
-                    expected_values[stage_name]["dswitch" + label] = self.basis.dh_e
+                if   label == "E":
+                   expected_values[stage_name]["dswitch" + label] = self.basis.dh_e
                 elif label == "P":
                     expected_values[stage_name]["dswitch" + label] = self.basis.dh_e
                 elif label == "P2":
@@ -455,7 +455,7 @@ class BasisVariance:
             dhdl_dict['minus'] = dhdl_calc - dhdl_err
         return dhdl_dict
 
-    def calcdhdl_master(self, expected, basis, lam_master, return_error=False):
+    def calcdhdl_master(self, expected, lam_master, return_error=False):
         #calculate the dhdl directly
         dhdl_calc = numpy.zeros(len(lam_master))
         dhdl_err = numpy.zeros(len(lam_master))
@@ -469,7 +469,7 @@ class BasisVariance:
         return dhdl_dict
         
 
-    def calcvar_master(self, expected, basis, lam_master, return_error=False):
+    def calcvar_master(self, expected,  lam_master, return_error=False):
         #calculate the variance directly
         integrand = {}
         variance = {}
@@ -512,21 +512,25 @@ class BasisVariance:
         return integrand,variance
 
     #---------------------------------------------------------------------------------------------
-    def seqGen(self, sampled, lams = self.lam_range):
+    def seqGen(self, sampled, lams = None):
         extra_lam = numpy.empty(0)
+        if lams is None:
+            lams = self.lam_range
         for i in lams:
             if not numpy.any([numpy.allclose([t],[i]) for t in sampled]) :
                 extra_lam = numpy.append(extra_lam,i)
         return extra_lam
 
-    def seqSolv(self, stage_range, sampled, extras, nc=self.complex, outlam=self.lam_range):
+    def seqSolv(self, stage_range, sampled, extras, outlam=None):
         #determine the sequence to pull from the data
+        if outlam is None:
+            outlam = self.lam_range
         nout = len(outlam)
         all_ndx_sorted = numpy.zeros(nout, numpy.int32)
         extracount = 0
         for i in xrange(nout):
             #Determine if our lambda is somewhere in the sampled
-            contianer = numpy.array([numpy.allclose(t,outlam[i]) for t in sampled)
+            contianer = numpy.array([numpy.allclose(t,outlam[i]) for t in sampled])
             if not numpy.any(container):
                 #If entry not part of simulated states, grap from extra
                 all_ndx_sorted[i] = extras[extracount]
@@ -536,7 +540,7 @@ class BasisVariance:
         return all_ndx_sorted #This is already a 0->1 order
 
     #---------------------------------------------------------------------------------------------
-    def vargenerate_master(self, sequence=self.checkSequence()[0], lam_in=self.lam_range, verbose=None, calculate_var=True, calculatedhdl=False, return_error=False, bootstrap_error=False, bootstrap_count=200, bootstrap_basis=None, bootstrap_lam=None): 
+    def vargenerate_master(self, sequence=None, lam_in=None, verbose=None, calculate_var=True, calculatedhdl=False, return_error=False, bootstrap_error=False, bootstrap_count=200): 
         #In progress function to calculate the total variance along one transformation, independent of path
 
         #Set all flags
@@ -553,6 +557,10 @@ class BasisVariance:
             if int(bootstrap_count) < 2:
                 print "Must have more than 1 bootstrap sample. Disabling bootstrap sampling!"
                 bootstrap_error = False
+        if lam_in is None:
+            lam_in = self.lam_range
+        if sequence is None:
+            sequence = self.checkSequence()[0]
         self.checkSequence(sequence)
         valid_seqs = self.checkSequence()
         nstage = len(sequence)
@@ -560,93 +568,88 @@ class BasisVariance:
         states = xrange(self.complex.nstates)
         #Figure out sequencing, need to determine actual state
         #Need the stage_ranges and the sampled for index sorting later
-        if sequence is valid_seqs[0] #ep c ar
-            stage_ranges = [ states[nc.real_EPCAR:nc.real_CAR+1], states[nc.real_CAR:nc.real_AR+1], states[nc.real_AR:nc.real_alloff+1] ]
-            sampled = [ nc.real_E_states[stage_ranges[0]], nc.real_C_states[stage_ranges[1]], nc.real_R_states[stage_ranges[2]] ]
-            extra0 = self.seqGen(sampled[0]) #Stage 0: EPCAR -> CAR
-            extra1 = self.seqGen(sampled[1]) #Stage 1: CAR -> AR
-            extra2 = self.seqGen(sampled[2]) #Stage 2: AR -> off
-            extra_lam = [extra0, extra1, extra2]
-        if sequence is valid_seqs[1] #epa c r
-            stage_ranges = [ states[nc.real_EPCAR:nc.real_CR+1], states[nc.real_CR:nc.real_R+1], states[nc.real_R:nc.real_alloff+1] ]
-            sampled = [ nc.real_E_states[stage_ranges[0]], nc.real_C_states[stage_ranges[1]], nc.real_R_states[stage_ranges[2]] ]
-            extra0 = self.seqGen(sampled[0]) #Stage 0: EPCAR -> CR
-            extra1 = self.seqGen(sampled[1]) #Stage 1: CR -> R
-            extra2 = self.seqGen(sampled[2]) #Stage 2: R -> off
-            extra_lam = [extra0, extra1, extra2]
-        if sequence is valid_seqs[2] #ep a c r
-            stage_ranges = [ states[nc.real_EPCAR:nc.real_CAR+1], states[nc.real_CAR:nc.real_CR+1], states[nc.real_CR:nc.real_R+1], states[nc.real_R:nc.real_alloff+1] ]
-            sampled = [ nc.real_E_states[stage_ranges[0]], nc.real_A_states[stage_ranges[1]], nc.real_C_states[stage_ranges[2]], nc.real_R_states[stage_ranges[3] ]
-            extra0 = self.seqGen(sampled[0]) #Stage 0: EPCAR -> CAR
-            extra1 = self.seqGen(sampled[1]) #Stage 1: CAR -> CR
-            extra2 = self.seqGen(sampled[2]]) #Stage 2: CR -> R
-            extra3 = self.seqGen(sampled[3]) #Stage 3: R -> off
-            extra_lam = [extra0, extra1, extra2, extra3]
-        if sequence is valid_seqs[3] #a ep c r
-            stage_ranges = [ states[nc.real_EPCAR:nc.real_EPCR+1], states[nc.real_EPCR:nc.real_CR+1], states[nc.real_CR:nc.real_R+1], states[nc.real_R:nc.real_alloff+1] ]
-            sampled = [ nc.real_A_states[stage_ranges[0]], nc.real_E_states[stage_ranges[1]], nc.real_C_states[stage_ranges[2]], nc.real_R_states[stage_ranges[3] ]
-            extra0 = self.seqGen(sampled[0]) #Stage 0: EPCAR -> EPCR
-            extra1 = self.seqGen(smapled[1]) #Stage 1: EPCR -> CR
-            extra2 = self.seqGen(sampled[2]) #Stage 2: CR -> R
-            extra3 = self.seqGen(sampled[3]) #Stage 3: R -> off
-            extra_lam = [extra0, extra1, extra2, extra3]
+        if sequence is valid_seqs[0]: #ep c ar
+            stage_ranges = { 'EP':states[nc.real_EPCAR:nc.real_CAR+1], 'C':states[nc.real_CAR:nc.real_AR+1], 'AR':states[nc.real_AR:nc.real_alloff+1] }
+            sampled = { 'EP':nc.real_E_states[stage_ranges['EP']], 'C':nc.real_C_states[stage_ranges['C']], 'AR':nc.real_R_states[stage_ranges['AR']] }
+            extra0 = self.seqGen(sampled['EP']) #Stage 0: EPCAR -> CAR
+            extra1 = self.seqGen(sampled['C']) #Stage 1: CAR -> AR
+            extra2 = self.seqGen(sampled['AR']) #Stage 2: AR -> off
+            extra_lam = {'EP':extra0, 'C':extra1, 'AR':extra2}
+        if sequence is valid_seqs[1]: #epa c r
+            stage_ranges = { 'EPA':states[nc.real_EPCAR:nc.real_CR+1], 'C':states[nc.real_CR:nc.real_R+1], 'R':states[nc.real_R:nc.real_alloff+1] }
+            sampled = { 'EPA':nc.real_E_states[stage_ranges['EPA']], 'C':nc.real_C_states[stage_ranges['C']], 'R':nc.real_R_states[stage_ranges['R']] }
+            extra0 = self.seqGen(sampled['EPA']) #Stage 0: EPCAR -> CR
+            extra1 = self.seqGen(sampled['C']) #Stage 1: CR -> R
+            extra2 = self.seqGen(sampled['R']) #Stage 2: R -> off
+            extra_lam = {'EPA':extra0, 'C':extra1, 'R':extra2}
+        if sequence is valid_seqs[2]: #ep a c r
+            stage_ranges = { 'EP':states[nc.real_EPCAR:nc.real_CAR+1], 'A':states[nc.real_CAR:nc.real_CR+1], 'C':states[nc.real_CR:nc.real_R+1], 'R':states[nc.real_R:nc.real_alloff+1] }
+            sampled = { 'EP':nc.real_E_states[stage_ranges['EP']], 'A':nc.real_A_states[stage_ranges['A']], 'C':nc.real_C_states[stage_ranges['C']], 'R':nc.real_R_states[stage_ranges['R']] }
+            extra0 = self.seqGen(sampled['EP']) #Stage 0: EPCAR -> CAR
+            extra1 = self.seqGen(sampled['A']) #Stage 1: CAR -> CR
+            extra2 = self.seqGen(sampled['C']) #Stage 2: CR -> R
+            extra3 = self.seqGen(sampled['R']) #Stage 3: R -> off
+            extra_lam = {'EP':extra0, 'A':extra1, 'C':extra2, 'R':extra3}
+        if sequence is valid_seqs[3]: #a ep c r
+            stage_ranges = { 'A':states[nc.real_EPCAR:nc.real_EPCR+1], 'EP':states[nc.real_EPCR:nc.real_CR+1], 'C':states[nc.real_CR:nc.real_R+1], 'R':states[nc.real_R:nc.real_alloff+1] }
+            sampled = { 'A':nc.real_A_states[stage_ranges['A']], 'EP':nc.real_E_states[stage_ranges['EP']], 'C':nc.real_C_states[stage_ranges['C']], 'R':nc.real_R_states[stage_ranges['R']] }
+            extra0 = self.seqGen(sampled['A']) #Stage 0: EPCAR -> EPCR
+            extra1 = self.seqGen(smapled['EP']) #Stage 1: EPCR -> CR
+            extra2 = self.seqGen(sampled['C']) #Stage 2: CR -> R
+            extra3 = self.seqGen(sampled['R']) #Stage 3: R -> off
+            extra_lam = {'A':extra0, 'EP':extra1, 'C':extra2, 'R':extra3}
         #Find the expectations:
         expectations = self.buildExpectations_master(self.complex, extra_lam, sequence, verbose=verbose)        
-            
-        #Find expectations, sort them
-        expectations = self.buildExpected_master(self.complex, extra_states, verbose=verbose)
-        sorted_ndx = self.sequence_master(self.complex, extra_states, lam_out=lam_out)
-        for key in expectations['sorting_items']:
-            expectations[key] = expectations[key][sorted_ndx]
+        sorted_ndxs  = {}
+        #Generate the sorting algroithm
+        for stage in sequence:
+            sorted_ndxs[stage] = self.seqSolv(stage_range[stage], sampled[stage], extra_lam[stage])
+            for key in expectations[sequence[stage]]['sorting_items']:
+                expectations[stage][key] = expectations[stage][key][sorted_ndxs[stage]]
         #Perform remaining calculations
         if calculate_var:
-            integrand,variance = self.calcvar_master(expectations, self.basis, lam_out.E_states, return_error=return_error)
-            if calculatedhdl:
-                dhdl = self.calcdhdl_master(expectations, self.basis, lam_out.E_states, return_error=return_error)
+            integrand = {}
+            variance = {}
+            dhdl = {}
+            for stage in sequence:
+                integrand[stage],variance[stage] = self.calcvar_master(expectations[stage], self.lam_range, return_error=return_error)
+                if calculatedhdl:
+                    dhdl[stage] = self.calcdhdl_master(expectations[stage], self.lam_range, return_error=return_error)
             #If bootstrap is on, run it
             if bootstrap_error:
-                if bootstrap_basis is None: #Allows one to pass in prediced basis functions from the inv_var calls
-                    bootstrap_basis=self.basis
-                if bootstrap_lam is None:
-                    bootstrap_lam=lam_out.E_states
-                #Deterimine shape of output matrix [le,bootstrap_count]
-                bootstrap_integrands = numpy.zeros([lam_out.nstates,bootstrap_count])
-                bootstrap_dhdl = numpy.zeros([lam_out.nstates,bootstrap_count])
-                bootstrap_error = numpy.zeros([lam_out.nstates])
+                Nlam = len(self.lam_range)
+                bootstrap_integrands = {}
+                bootstrap_dhdl = {}
+                bootstrap_error = {}
+                for stage in sequence:
+                    #Deterimine shape of output matrix [le,bootstrap_count]
+                    bootstrap_ingegrands[stage] = numpy.zeros([Nlam,bootstrap_count])
+                    bootstrap_dhdl[stage] = numpy.zeros([Nlam,bootstrap_count])
+                    bootstrap_error[stage] = numpy.zeros([Nlam])
+                #Generate bootstraped data
                 for i in xrange(bootstrap_count):
-                    print "Bootstrap pass: %d / %d" % (i+1,bootstrap_count)
-                    #Normal case
-                    boot_expect = self.buildExpected_master(self.complex, extra_states, verbose=verbose, bootstrap=True)
-
-                    for key in boot_expect['sorting_items']:
-                        boot_expect[key] = boot_expect[key][sorted_ndx]
-
-                    boot_integrand_holder, boot_variance_junk = self.calcvar_master(boot_expect, bootstrap_basis, bootstrap_lam, return_error=False)
-                    if calculatedhdl:
-                        boot_dhdl_holder = self.calcdhdl_master(boot_expect, bootstrap_basis, bootstrap_lam, return_error=False)
-                        bootstrap_dhdl[:,i] = boot_dhdl_holder['natural']
-                    bootstrap_integrands[:,i] = boot_integrand_holder['natural']
-                #Calculate variance of the collection
-                bootstrap_error[:] = numpy.sqrt(numpy.var(bootstrap_integrands[:,:], axis=1))
-                integrand['plus'] = integrand['natural'] + bootstrap_error
-                integrand['minus'] = integrand['natural'] - bootstrap_error
-                integrand['bootstrap_error'] = bootstrap_error
-                if calculatedhdl:
-                    bootstrap_dhdl_error = numpy.sqrt(numpy.var(bootstrap_dhdl[:,:], axis=1))
-                    dhdl['plus'] = dhdl['natural'] + bootstrap_dhdl_error
-                    dhdl['minus'] = dhdl['natural'] - bootstrap_dhdl_error
-                    dhdl['bootstrap_error'] = bootstrap_dhdl_error
+                    print "Bootstrap Pass: %d / %d" (i+1,bootstrap_count) 
+                    boot_expect = self.buildExpectations_master(self.complex, extra_lam, sequence, verbose=verbose, bootstrap=True)        
+                    for stage in sequence:
+                        for key in boot_expect[stage]['sorting_items']:
+                            boot_expect[stage][key] = boot_expecti[stage][key][sorted_ndxs[stage]]
+                        boot_integrand_holder, boot_variance_junk = self.calcvar_master(expectations[stage]. self.lam_range, return_error=False)
+                        if calculatedhdl:
+                            boot_dhdl_holder = self.calcdhdl_master(expectations[stage], self.lam_range, return_error=False)
+                            bootstrap_dhdl[stage][:,i] = boot_dhdl_holder['natural']
+                        bootstrap_integrands[stage][:,i] = boot_integrand_holder['natural']
+                #Determine bootstrap error
+                for stage in sequnce:
+                    bootstrap_error[stage][:] = numpy.sqrt(numpy.var(bootstrap_integrands[stage][:,:],axis=1))
+                    integrand[stage]['plus'] = integrand[stage]['natural'] + bootstrap_error[stage]
+                    integrand[stage]['minus'] = integrand[stage]['natural'] - bootstrap_error[stage]
+                    integrand[stage]['bootstrap_error'] = bootstrap_error[stage]
             if calculatedhdl:
                 return integrand,variance,dhdl
             else:
                 return integrand,variance
         else:
             return expectations
-    #---------------------------------------------------------------------------------------------
-
-
-
-
 
     #---------------------------------------------------------------------------------------------
     def vargenerate_electrostatics(self, lam_in_e=None, verbose=None, calculate_var=True, calculatedhdl=False, expect_method='complete', return_error=False, bootstrap_error=False, bootstrap_count=200, bootstrap_basis=None, bootstrap_lam=None, basis_derivatives=None):
@@ -1300,3 +1303,5 @@ class BasisVariance:
 
         return
 
+if __name__ == "__main__":
+    print "Syntax is good boss"
