@@ -232,10 +232,8 @@ class BasisVariance:
             N_ks[stage_name][:nc.nstates] = nc.N_k
             #Determine the set of changing basis functions
             nchanging = len(sequence[stage_index])
-            basis_labels = []
             #Generate basis function containers, run through each one
             for label in sequence[stage_index]:
-                basis_labels.append(label)
                 if label == "P":
                     individualU_klns[stage_name]["P"] = numpy.zeros(u_klns[stage_name].shape, numpy.float64)
                     individualU_klns[stage_name]["P2"] = numpy.zeros(u_klns[stage_name].shape, numpy.float64)
