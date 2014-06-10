@@ -213,6 +213,8 @@ class BasisVariance:
             print "How did you make it here?"
             sys.exit(1) 
         #Compute the potential energies
+        import pbd
+        pdb.set_trace()
         u_klns = {}
         N_ks = {}
         individualU_klns = {}
@@ -504,6 +506,8 @@ class BasisVariance:
                 integrand[stage],variance[stage] = self.calcvar_master(expectations[stage], self.lam_range, return_error=return_error)
                 if calculatedhdl:
                     dhdl[stage] = self.calcdhdl_master(expectations[stage], self.lam_range, return_error=return_error)
+            import pdb
+            pdb.set_trace()
             #If bootstrap is on, run it
             if bootstrap_error:
                 Nlam = len(self.lam_range)
