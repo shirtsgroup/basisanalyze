@@ -694,6 +694,8 @@ class BasisVariance:
                 #Leave the constPMEsingle matrix 0 so the rest of the code continues to work (it was initilized to 0 earlier)
                 const_PMEsquare_matrix[k,:] = solution[1,:]
         const_E_matrix = nc.u_kln[:,nc.real_EAR,:] - nc.u_kln[:,nc.real_AR,:] - const_PMEsingle_matrix - const_PMEsquare_matrix
+        import pdb
+        pdb.set_trace()
         try: #Sanity check 
             nc.real_PMEAR #Variable exists
         except:
