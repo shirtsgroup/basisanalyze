@@ -153,15 +153,15 @@ class BasisVariance:
         LamAtLess = nc.real_PMEFull_states[Psolve]
         hless = self.basis.h_e(LamAtLess)
         hfull = self.basis.h_e(LamAtFull)
-        const_P2_matrix = (PMELess/hless - PMEFull/hfull) / (hless-hfull)
-        const_P_matrix = PMEFull/hfull - hfull*const_P2_matrix
+        const_Psq_matrix = (PMELess/hless - PMEFull/hfull) / (hless-hfull)
+        const_P_matrix = PMEFull/hfull - hfull*const_Psq_matrix
         #Compute the rest of the basis based on sequence
         if sequence is valid_seqs[0]: #ep c ar
             const_R_matrix, const_A_matrix, const_C_matrix, const_E_matrix = self.Ugen_EP_C_AR(nc)
             #Assign energy evaluation stages
             Ustage = [
                 lambda lam: self.basis.h_e(lam)*const_E_matrix + \
-                            (self.basis.h_e(lam)**2)*const_P2_matrix + \
+                            (self.basis.h_e(lam)**2)*const_Psq_matrix + \
                             self.basis.h_e(lam)*const_P_matrix + \
                             nc.u_kln[:,nc.real_CAR,:],
                 lambda lam: lam * const_C_matrix + \
@@ -174,7 +174,7 @@ class BasisVariance:
             const_R_matrix, const_A_matrix, const_C_matrix, const_E_matrix = self.Ugen_EPA_C_R(nc)
             Ustage = [
                 lambda lam: self.basis.h_e(lam)*const_E_matrix + \
-                            (self.basis.h_e(lam)**2)*const_P2_matrix + \
+                            (self.basis.h_e(lam)**2)*const_Psq_matrix + \
                             self.basis.h_e(lam)*const_P_matrix + \
                             self.basis.h_a(lam)*const_A_matrix + \
                             nc.u_kln[:,nc.real_CR,:],
@@ -187,7 +187,7 @@ class BasisVariance:
             const_R_matrix, const_A_matrix, const_C_matrix, const_E_matrix = self.Ugen_EP_A_C_R(nc)
             Ustage = [
                 lambda lam: self.basis.h_e(lam)*const_E_matrix + \
-                            (self.basis.h_e(lam)**2)*const_P2_matrix + \
+                            (self.basis.h_e(lam)**2)*const_Psq_matrix + \
                             self.basis.h_e(lam)*const_P_matrix + \
                             nc.u_kln[:,nc.real_CAR,:],
                 lambda lam: self.basis.h_a(lam)*const_A_matrix + \
@@ -203,7 +203,7 @@ class BasisVariance:
                 lambda lam: self.basis.h_a(lam)*const_A_matrix + \
                             nc.u_kln[:,nc.real_EPCR,:],
                 lambda lam: self.basis.h_e(lam)*const_E_matrix + \
-                            (self.basis.h_e(lam)**2)*const_P2_matrix + \
+                            (self.basis.h_e(lam)**2)*const_Psq_matrix + \
                             self.basis.h_e(lam)*const_P_matrix + \
                             nc.u_kln[:,nc.real_CR,:],
                 lambda lam: lam * const_C_matrix + \
@@ -243,7 +243,7 @@ class BasisVariance:
             for label in sequence[stage_index]:
                 if label == "P":
                     individualU_klns[stage_name]["P"] = numpy.zeros(u_klns[stage_name].shape, numpy.float64)
-                    individualU_klns[stage_name]["P2"] = numpy.zeros(u_klns[stage_name].shape, numpy.float64)
+                    individualU_klns[stage_name]["Psq"] = numpy.zeros(u_klns[stage_name].shape, numpy.float64)
                 else:
                     individualU_klns[stage_name][label] = numpy.zeros(u_klns[stage_name].shape, numpy.float64)
             #Compute energies
@@ -256,7 +256,7 @@ class BasisVariance:
                         individualU_klns[stage_name][label][:nc.nstates,i,:] = const_E_matrix
                     elif label == "P":
                         individualU_klns[stage_name][label][:nc.nstates,i,:] = const_P_matrix
-                        individualU_klns[stage_name]["P2"][:nc.nstates,i,:] = const_P2_matrix
+                        individualU_klns[stage_name]["Psq"][:nc.nstates,i,:] = const_Psq_matrix
                     elif label == "C":
                         individualU_klns[stage_name][label][:nc.nstates,i,:] = const_C_matrix
                     elif label == "A":
@@ -289,14 +289,12 @@ class BasisVariance:
             else:
                 mbar = MBAR(u_klns[stage_name], N_ks[stage_name], verbose = verbose, method = 'adaptive')
             expected_values[stage_name] = {'labels':basis_labels, 'Nbasis':Nbasis}
-            import pdb
-            pdb.set_trace()
             for label in basis_labels:
                 if   label == "E":
                    expected_values[stage_name]["dswitch" + label] = basis_derivatives.dh_e
                 elif label == "P":
                     expected_values[stage_name]["dswitch" + label] = basis_derivatives.dh_e
-                elif label == "P2":
+                elif label == "Psq":
                     expected_values[stage_name]["dswitch" + label] = lambda X: 2*basis_derivatives.h_e(X)*basis_derivatives.dh_e(X)
                 elif label == "C":
                     expected_values[stage_name]["dswitch" + label] = lambda X: X
