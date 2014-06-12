@@ -694,8 +694,6 @@ class BasisVariance:
                 #Leave the constPMEsingle matrix 0 so the rest of the code continues to work (it was initilized to 0 earlier)
                 const_PMEsquare_matrix[k,:] = solution[1,:]
         const_E_matrix = nc.u_kln[:,nc.real_EAR,:] - nc.u_kln[:,nc.real_AR,:] - const_PMEsingle_matrix - const_PMEsquare_matrix
-        import pdb
-        pdb.set_trace()
         try: #Sanity check 
             nc.real_PMEAR #Variable exists
         except:
@@ -744,6 +742,8 @@ class BasisVariance:
             mbar = MBAR(u_kln_new, N_k_new, verbose = verbose, method = 'adaptive')
         expected_values = {'labels':basislabels, 'Nbasis':Nbasis, 'dswitche':basis_derivatives.dh_e, 'dswitchpmes':basis_derivatives.dh_e, 'dswitchpmesq':lambda X: 2*basis_derivatives.h_e(X)*basis_derivatives.dh_e(X)}
         exclude_from_sorting = expected_values.keys()
+        import pdb
+        pdb.set_trace()
         for i in range(Nbasis):
             label = basislabels[i]
             (Eui, dEui) = mbar.computeExpectations(individualU_kln[label])
