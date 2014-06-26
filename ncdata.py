@@ -820,6 +820,8 @@ class ncdata:
             self.kT = kB * self.temperature
             self.kcalmolsq = (self.kT / units.kilocalories_per_mole)**2
             self.kcalmol = (self.kT / units.kilocalories_per_mole)
+            self.kJmolsq = (self.kT / units.kilojoules_per_mole)**2
+            self.kJmol = (self.kT / units.kilojoules_per_mole)
 
             # Choose number of samples to discard to equilibration
             u_n = self._extract_u_n(self.ncfile, verbose=self.verbose)

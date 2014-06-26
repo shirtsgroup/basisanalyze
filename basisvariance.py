@@ -117,7 +117,7 @@ class BasisVariance:
             else:
                 return
 
-    def buildExpected_master(self, nc, extra_lam, sequence, verbose=None, bootstrap=False, basis_derivatives=None, single_stage=None):
+    def buildExpected_master(self, nc, extra_lam, sequence, verbose=None, bootstrap=False, basis_derivatives=None, single_stage=None, fragment_kln=False, stage_ranges=None):
         """
         This particular bit of coding will be reworked in this branch to make sure that all of the possible scheudles can be handled in a general maner with minimal user input.
         Unfortunatley, this will require reading in both the alchemy file and user input information.
@@ -156,7 +156,7 @@ class BasisVariance:
         const_Psq_matrix = (PMELess/hless - PMEFull/hfull) / (hless-hfull)
         const_P_matrix = PMEFull/hfull - hfull*const_Psq_matrix
         #Compute the rest of the basis based on sequence
-        if sequence is valid_seqs[0]: #ep c ar
+        if sequence == valid_seqs[0]: #ep c ar
             const_R_matrix, const_A_matrix, const_C_matrix, const_E_matrix = self.Ugen_EP_C_AR(nc)
             #Assign energy evaluation stages
             Ustage = [
@@ -229,14 +229,27 @@ class BasisVariance:
             xl_stage = extra_lam[stage_name]
             nxl = len(xl_stage)
             if verbose: print "Generating Expectations for stage " + stage_name
+            if fragment_kln:
+                nstate_analyze = len(stage_ranges[stage_name])
+                active_states = stage_ranges[stage_name]
+            else:
+                nstate_analyze = nc.nstates
+                active_states = numpy.array(range(nc.nstates))
             individualU_klns[stage_name] = {}
             #Preallocate all the energy memory
-            u_klns[stage_name] = numpy.zeros([nc.nstates + nxl, nc.nstates + nxl, nc.retained_iters], numpy.float64)
+            u_klns[stage_name] = numpy.zeros([nstate_analyze + nxl, nstate_analyze + nxl, nc.retained_iters], numpy.float64)
             N_samples = nc.retained_iters
-            N_ks[stage_name] = numpy.zeros(nc.nstates + nxl, numpy.int32)
+            N_ks[stage_name] = numpy.zeros(nstate_analyze + nxl, numpy.int32)
             #Copy over original data
-            u_klns[stage_name][:nc.nstates,:nc.nstates,:nc.retained_iters] = nc.u_kln
-            N_ks[stage_name][:nc.nstates] = nc.N_k
+            if fragment_kln:
+                #Loop over each state individually, inefficent, but multislicing does not work correctly
+                for k in xrange(nstate_analyze):
+                    for l in xrange(nstate_analyze):
+                        u_klns[stage_name][k,l,:nc.retained_iters] = nc.u_kln[active_states[k],active_states[l],:]
+            else:
+                #Original, quick way
+                u_klns[stage_name][:nstate_analyze,:nstate_analyze,:nc.retained_iters] = nc.u_kln
+            N_ks[stage_name][:nstate_analyze] = nc.N_k[active_states]
             #Determine the set of changing basis functions
             nchanging = len(sequence[stage_index])
             #Generate basis function containers, run through each one
@@ -249,23 +262,45 @@ class BasisVariance:
             #Compute energies
             for i in xrange(nxl):
                 lam = xl_stage[i]
-                u_klns[stage_name][:nc.nstates,i+nc.nstates,:] = Ustage[stage_index](lam)
-            for i in xrange(nc.nstates + nxl):
+                U = Ustage[stage_index](lam)
+                if fragment_kln:
+                    for k in xrange(len(active_states)):
+                        u_klns[stage_name][k,i+nstate_analyze,:] = U[active_states[k],:]
+                else:
+                    u_klns[stage_name][:nstate_analyze,i+nstate_analyze,:] = U
+            for i in xrange(nstate_analyze + nxl):
                 for label in sequence[stage_index]:
-                    if   label == "E":
-                        individualU_klns[stage_name][label][:nc.nstates,i,:] = const_E_matrix
-                    elif label == "P":
-                        individualU_klns[stage_name][label][:nc.nstates,i,:] = const_P_matrix
-                        individualU_klns[stage_name]["Psq"][:nc.nstates,i,:] = const_Psq_matrix
-                    elif label == "C":
-                        individualU_klns[stage_name][label][:nc.nstates,i,:] = const_C_matrix
-                    elif label == "A":
-                        individualU_klns[stage_name][label][:nc.nstates,i,:] = const_A_matrix
-                    elif label == "R":
-                        individualU_klns[stage_name][label][:nc.nstates,i,:] = const_R_matrix
+                    if fragment_kln:
+                        for k in xrange(nstate_analyze):
+                            if   label == "E":
+                                individualU_klns[stage_name][label][k,i,:] = const_E_matrix[k,:]
+                            elif label == "P":
+                                individualU_klns[stage_name][label][k,i,:] = const_P_matrix[k,:]
+                                individualU_klns[stage_name]["Psq"][k,i,:] = const_Psq_matrix[k,:]
+                            elif label == "C":
+                                individualU_klns[stage_name][label][k,i,:] = const_C_matrix[k,:]
+                            elif label == "A":
+                                individualU_klns[stage_name][label][k,i,:] = const_A_matrix[k,:]
+                            elif label == "R":
+                                individualU_klns[stage_name][label][k,i,:] = const_R_matrix[k,:]
+                            else:
+                                print "Seriously, how did you make it here?"
+                                sys.exit(1)
                     else:
-                        print "Seriously, how did you make it here?"
-                        sys.exit(1)
+                        if   label == "E":
+                            individualU_klns[stage_name][label][:nstate_analyze,i,:] = const_E_matrix
+                        elif label == "P":
+                            individualU_klns[stage_name][label][:nstate_analyze,i,:] = const_P_matrix
+                            individualU_klns[stage_name]["Psq"][:nstate_analyze,i,:] = const_Psq_matrix
+                        elif label == "C":
+                            individualU_klns[stage_name][label][:nstate_analyze,i,:] = const_C_matrix
+                        elif label == "A":
+                            individualU_klns[stage_name][label][:nstate_analyze,i,:] = const_A_matrix
+                        elif label == "R":
+                            individualU_klns[stage_name][label][:nstate_analyze,i,:] = const_R_matrix
+                        else:
+                            print "Seriously, how did you make it here?"
+                            sys.exit(1)
             if bootstrap:
                 u_kln_boot = numpy.zeros(u_klns[stage_name].shape)
                 individualU_klns_boot = {}
@@ -285,7 +320,7 @@ class BasisVariance:
             Nbasis = len(basis_labels)
             #Prep MBAR
             if nc.mbar_ready:
-                mbar = MBAR(u_klns[stage_name], N_ks[stage_name], verbose = False, method = 'adaptive', initial_f_k=numpy.concatenate((nc.mbar.f_k,numpy.zeros(nxl))))
+                mbar = MBAR(u_klns[stage_name], N_ks[stage_name], verbose = False, method = 'adaptive', initial_f_k=numpy.concatenate((nc.mbar.f_k[active_states],numpy.zeros(nxl))))
             else:
                 mbar = MBAR(u_klns[stage_name], N_ks[stage_name], verbose = verbose, method = 'adaptive')
             expected_values[stage_name] = {'labels':basis_labels, 'Nbasis':Nbasis}
@@ -307,7 +342,7 @@ class BasisVariance:
             #Generate Expectations
             for i in xrange(Nbasis):
                 label = basis_labels[i]
-                (Eui, dEui) = mbar.computeExpectations(individualU_klns[stage_name][label])
+                (Eui, dEui) = mbar.computeExpectations(individualU_klns[stage_name][label], real_space=True)
                 (Eui2, dEui2) = mbar.computeExpectations(individualU_klns[stage_name][label]**2)
                 expected_values[stage_name]['var_u'+label] = Eui2 - Eui**2
                 dvar_ui = numpy.sqrt(dEui2**2 + 2*(Eui*dEui)**2)
@@ -392,10 +427,13 @@ class BasisVariance:
                 extra_lam = numpy.append(extra_lam,i)
         return extra_lam
 
-    def seqSolv(self, stage_range, sampled, extras, outlam=None):
+    def seqSolv(self, stage_range, sampled, extras, outlam=None, nstates=None):
         #determine the sequence to pull from the data
         if outlam is None:
             outlam = self.lam_range
+        #Set the nstates if u_kln is fragemnted
+        if nstates is None:
+            nstates=self.complex.nstates
         nout = len(outlam)
         all_ndx_sorted = numpy.zeros(nout, numpy.int32)
         extracount = 0
@@ -404,14 +442,15 @@ class BasisVariance:
             container = numpy.array([numpy.allclose(t,outlam[i]) for t in sampled])
             if not numpy.any(container):
                 #If entry not part of simulated states, grab from extra
-                all_ndx_sorted[i] = self.complex.nstates + extracount
+                all_ndx_sorted[i] = nstates + extracount
                 extracount += 1
             else: #Pull from the real state
-                all_ndx_sorted[i] = int(stage_range[container]) #There should be only one True here if set up stage_range and sampled correctly
+                all_ndx_sorted[i] = int(stage_range[container][0]) #There should be only one True here if set up stage_range and sampled correctly
+                #!!! The [0] is a hotfix for my EPA-C-R simulation
         return all_ndx_sorted #This is already a 0->1 order
 
     #---------------------------------------------------------------------------------------------
-    def vargenerate_master(self, sequence=None, lam_in=None, verbose=None, calculate_var=True, calculatedhdl=False, return_error=False, bootstrap_error=False, bootstrap_count=200, basis_derivatives=None, single_stage=None): 
+    def vargenerate_master(self, sequence=None, lam_in=None, verbose=None, calculate_var=True, calculatedhdl=False, return_error=False, bootstrap_error=False, bootstrap_count=200, basis_derivatives=None, single_stage=None, fragment_kln=False): 
         #In progress function to calculate the total variance along one transformation, independent of path
 
         #Set all flags
@@ -472,15 +511,18 @@ class BasisVariance:
         else:
             print "Sequence not identified by logic, failing"
             sys.exit(1)
-        #Find the expectations:
-        expectations = self.buildExpected_master(self.complex, extra_lam, sequence, verbose=verbose, basis_derivatives=None, single_stage=single_stage)
+        #Find the expectations
+        expectations = self.buildExpected_master(self.complex, extra_lam, sequence, verbose=verbose, basis_derivatives=None, single_stage=single_stage, fragment_kln=fragment_kln, stage_ranges=stage_ranges)
         sorted_ndxs  = {}
         #If we are using only 1 stage, overwrite sequence to be just the stage
         if single_stage is not None:
             sequence = [ sequence[single_stage] ] #Wrap this in a list otherwise it will pull just the chars from the stage name
         #Generate the sorting algroithm
         for stage in sequence:
-            sorted_ndxs[stage] = self.seqSolv(stage_ranges[stage], sampled[stage], extra_lam[stage], outlam=lam_in)
+            if fragment_kln:
+                sorted_ndxs[stage] = self.seqSolv(numpy.array(range(len(stage_ranges[stage]))), sampled[stage], extra_lam[stage], outlam=lam_in, nstates=len(stage_ranges[stage]))
+            else:
+                sorted_ndxs[stage] = self.seqSolv(stage_ranges[stage], sampled[stage], extra_lam[stage], outlam=lam_in)
             for key in expectations[stage]['sorting_items']:
                 try:
                     expectations[stage][key] = expectations[stage][key][sorted_ndxs[stage]]
@@ -513,7 +555,7 @@ class BasisVariance:
                 #Generate bootstraped data
                 for i in xrange(bootstrap_count):
                     print "Bootstrap Pass: %d / %d" % (i+1,bootstrap_count) 
-                    boot_expect = self.buildExpected_master(self.complex, extra_lam, sequence, verbose=verbose, bootstrap=True)        
+                    boot_expect = self.buildExpected_master(self.complex, extra_lam, sequence, verbose=verbose, bootstrap=True, fragment_kln=fragment_kln, stage_ranges=stage_ranges) 
                     for stage in sequence:
                         for key in boot_expect[stage]['sorting_items']:
                             boot_expect[stage][key] = boot_expect[stage][key][sorted_ndxs[stage]]
@@ -733,30 +775,35 @@ class BasisVariance:
                     for j in range(nc.nstates):
                         print "%8.3f" % nc.dDeltaF_ij[i,j],
                     print ""
-            if startstate is None or startstate is 'EAR':
-                nc.free_energy_start = nc.real_EAR
+            if startstate is None or startstate is 'EPCAR':
+                nc.free_energy_start = nc.real_EPCAR
+            elif startstate is 'PCAR':
+                nc.free_energy_start = nc.real_PCAR
+            elif startstate is 'CAR':
+                nc.free_energy_start = nc.real_CAR
             elif startstate is 'AR':
                 nc.free_energy_start = nc.real_AR
             elif startstate is 'R':
                 nc.free_energy_start = nc.real_R
-            elif startstate is 'Inverse':
-                nc.free_energy_start = nc.real_inverse
             elif startstate is 'Alloff':
                 nc.free_energy_start = nc.real_alloff
             else:
                 nc.free_energy_start = startstate
-            if endstate is None or endstate is 'EAR':
-                nc.free_energy_end = nc.real_EAR
+            if endstate is None or endstate is 'EPCAR':
+                nc.free_energy_end = nc.real_EPCAR
+            elif endstate is 'PCAR':
+                nc.free_energy_end = nc.real_PCAR
+            elif endstate is 'CAR':
+                nc.free_energy_end = nc.real_CAR
             elif endstate is 'AR':
                 nc.free_energy_end = nc.real_AR
             elif endstate is 'R':
                 nc.free_energy_end = nc.real_R
-            elif endstate is 'Inverse':
-                nc.free_energy_end = nc.real_inverse
             elif endstate is 'Alloff':
                 nc.free_energy_end = nc.real_alloff
             else:
                 nc.free_energy_end = endstate
+
         self.vacuum.DeltaF = self.vacuum.DeltaF_ij[self.vacuum.free_energy_start, self.vacuum.free_energy_end]
         self.complex.DeltaF = self.complex.DeltaF_ij[self.complex.free_energy_start, self.complex.free_energy_end]
         self.vacuum.dDeltaF = self.vacuum.dDeltaF_ij[self.vacuum.free_energy_start, self.vacuum.free_energy_end]
