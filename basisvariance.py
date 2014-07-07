@@ -759,6 +759,8 @@ class BasisVariance:
     #---------------------------------------------------------------------------------------------
     def free_energy(self, verbose=None, startstate=None, endstate=None):
         #Compute the free energy difference between states
+        #Startstate is the the i state you want to compare against
+        #Endstate is the j state you want to go to
         if verbose is None:
             verbose = self.default_verbosity
         for nc in [self.vacuum, self.complex]:
@@ -808,7 +810,8 @@ class BasisVariance:
         self.complex.DeltaF = self.complex.DeltaF_ij[self.complex.free_energy_start, self.complex.free_energy_end]
         self.vacuum.dDeltaF = self.vacuum.dDeltaF_ij[self.vacuum.free_energy_start, self.vacuum.free_energy_end]
         self.complex.dDeltaF = self.complex.dDeltaF_ij[self.complex.free_energy_start, self.complex.free_energy_end]
-        self.DeltaF = self.vacuum.DeltaF - self.complex.DeltaF
+        #Reversed the sign to make the math be correct
+        self.DeltaF = -(self.vacuum.DeltaF - self.complex.DeltaF)
         self.dDeltaF = numpy.sqrt(self.vacuum.dDeltaF**2 + self.complex.dDeltaF**2)
         print "Binding free energy : %16.3f +- %.3f kT (%16.3f +- %.3f kcal/mol)" % (self.DeltaF, self.dDeltaF, self.DeltaF * self.complex.kcalmol, self.dDeltaF * self.complex.kcalmol)
         print ""
