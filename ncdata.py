@@ -486,7 +486,9 @@ class ncdata:
         
         g_t = numpy.ones([T-1], numpy.float32)
         Neff_t = numpy.ones([T-1], numpy.float32)
+        print T
         for t in range(T-1):
+            print t
             g_t[t] = timeseries.statisticalInefficiency(A_t[t:T])
             Neff_t[t] = (T-t+1) / g_t[t]
         
@@ -716,10 +718,13 @@ class ncdata:
         return
 
     def compute_mbar(self):
-        self.mbar = MBAR(self.u_kln, self.N_k, verbose = self.verbose, method = 'adaptive')
+        if self.mbar_f_ki is not None:
+            self.mbar = MBAR(self.u_kln, self.N_k, verbose = self.verbose, method = 'adaptive', initial_f_k=self.mbar_f_ki)
+        else:
+            self.mbar = MBAR(self.u_kln, self.N_k, verbose = self.verbose, method = 'adaptive')
         self.mbar_ready = True
 
-    def __init__(self, phase, source_directory, verbose=False, real_R_states = None, real_A_states = None, real_E_states = None, compute_mbar = False, alchemy_source = None, save_equil_data=False, save_prefix="", run_checks=False, nequil=None, manual_subsample=False, u_kln_input=None, temp_in=298):
+    def __init__(self, phase, source_directory, verbose=False, real_R_states = None, real_A_states = None, real_E_states = None, compute_mbar = False, alchemy_source = None, save_equil_data=False, save_prefix="", run_checks=False, nequil=None, manual_subsample=False, u_kln_input=None, temp_in=298, mbar_f_ki=None):
         self.phase = phase
         self.verbose = verbose
         if type(save_prefix) is not str: save_prefix = ""
@@ -738,6 +743,7 @@ class ncdata:
             nequil = int(nequil)
         self.nequil = nequil
         self.manual_subsample = manual_subsample
+        self.mbar_f_ki=mbar_f_ki
 
         if u_kln_input is not None:
             self.u_kln_raw = u_kln_input 
