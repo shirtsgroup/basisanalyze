@@ -498,8 +498,96 @@ class ncdata:
         
         return (t, g, Neff_max)
 
+    def _subsample_kln(self, u_kln):
+        #Try to load in the data
+        if self.save_equil_data: #Check if we want to save/load equilibration data
+            try:
+                equil_data = numpy.load(os.path.join(self.source_directory, self.save_prefix + self.phase + '_equil_data_%s.npz' % self.subsample_method))
+                if self.nequil is None:
+                    self.nequil = equil_data['nequil']
+                elif type(self.nequil) is int and self.subsample_method == 'per-state':
+                    print "WARRNING: Per-state subsampling requested with only single value for equilibration..."
+                    try:
+                        self.nequil = equil_data['nequil']
+                        print "Loading equilibration from file with %i states read" % self.nstates
+                    except:
+                        print "Assuming equal equilibration per state of %i" % self.nequil
+                        self.nequil = numpy.array([self.nequil] * self.nstates)
+                self.g_t = equil_data['g_t']
+                Neff_max = equil_data['Neff_max']
+                #Do equilibration if we have not already
+                if self.subsample_method == 'per-state' and (len(self.g_t) < self.nstates or len(self.nequil) < self.nstates):
+                    equil_loaded = False
+                    raise IndexError
+                else:
+                    equil_loaded = True
+            except:
+                if self.subsample_method == 'per-state':
+                    self.nequil = numpy.zeros([self.nstates], dtype=numpy.int32)
+                    self.g_t = numpy.zeros([self.nstates])
+                    Neff_max = numpy.zeros([self.nstates])
+                    for k in xrange(self.nstates):
+                        if self.verbose: print "Computing timeseries for state %i/%i" % (k,self.nstates-1)
+                        self.nequil[k] = 0
+                        self.g_t[k] = timeseries.statisticalInefficiency(u_kln[k,k,:])
+                        Neff_max[k] = (u_kln[k,k,:].size + 1 ) / self.g_t[k]
+                        #[self.nequil[k], self.g_t[k], Neff_max[k]] = self._detect_equilibration(u_kln[k,k,:])
+                else:
+                    if self.nequil is None:
+                        [self.nequil, self.g_t, Neff_max] = self._detect_equilibration(self.u_n)
+                    else:
+                        [self.nequil_timeseries, self.g_t, Neff_max] = self._detect_equilibration(self.u_n)
+                equil_loaded = False
+            if not equil_loaded:
+                numpy.savez(os.path.join(self.source_directory, self.save_prefix + self.phase + '_equil_data_%s.npz' % self.subsample_method), nequil=self.nequil, g_t=self.g_t, Neff_max=Neff_max)
+        elif self.nequil is None:
+            if self.subsample_method == 'per-state':
+                self.nequil = numpy.zeros([self.nstates], dtype=numpy.int32)
+                self.g_t = numpy.zeros([self.nstates])
+                Neff_max = numpy.zeros([self.nstates])
+                for k in xrange(self.nstates):
+                    [self.nequil[k], self.g_t[k], Neff_max[k]] = self._detect_equilibration(u_kln[k,k,:])
+            else:
+                [self.nequil, self.g_t, Neff_max] = self._detect_equilibration(self.u_n)
+
+        if self.verbose: print [self.nequil, Neff_max]
+        # 1) Discard equilibration data
+        # 2) Subsample data to obtain uncorrelated samples
+        self.N_k = numpy.zeros(self.nstates, numpy.int32)
+        if self.subsample_method == 'per-state':
+            # Discard samples
+            nsamples_equil = self.niterations - self.nequil
+            self.u_kln = numpy.zeros([self.nstates,self.nstates,nsamples_equil.max()])
+            for k in xrange(self.nstates):
+                self.u_kln[k,:,:nsamples_equil[k]] = u_kln[k,:,self.nequil[k]:]
+            #Subsample
+            transfer_retained_indices = numpy.zeros([self.nstates,nsamples_equil.max()], dtype=numpy.int32)
+            for k in xrange(self.nstates):
+                state_indices = timeseries.subsampleCorrelatedData(self.u_kln[k,k,:], g = self.g_t[k])
+                self.N_k[k] = len(state_indices)
+                transfer_retained_indices[k,:self.N_k[k]] = state_indices
+            transfer_kln = numpy.zeros([self.nstates, self.nstates, self.N_k.max()])
+            self.retained_indices = numpy.zeros([self.nstates,self.N_k.max()], dtype=numpy.int32)
+            for k in xrange(self.nstates):
+                self.retained_indices[k,:self.N_k[k]] = transfer_retained_indices[k,:self.N_k[k]] #Memory reduction
+                transfer_kln[k,:,:self.N_k[k]] = self.u_kln[k,:,self.retained_indices[k,:self.N_k[k]]].T #Have to transpose since indexing in this way causes issues
+
+            #Cut down on memory, once function is done, transfer_kln should be released
+            self.u_kln = transfer_kln
+        else:
+            #Discard Samples
+            self.u_kln = u_kln[:,:,self.nequil:]
+            self.u_n = self.u_n[self.nequil:]
+            #Subsamples
+            indices = timeseries.subsampleCorrelatedData(self.u_n, g=self.g_t) # indices of uncorrelated samples
+            self.u_kln = self.u_kln[:,:,indices]
+            self.N_k[:] = len(indices)
+            self.retained_indices = indices
+
+        self.retained_iters = self.N_k
+        return
+
     def _build_u_kln(self, nuse = None, raw_input=False):
-        ndiscard = self.nequil
         if not raw_input:
             # Extract energies.
             if self.verbose: 
@@ -522,38 +610,22 @@ class ncdata:
             u_kln = self.u_kln_raw
 
         # Compute total negative log probability over all iterations.
-        u_n = numpy.zeros([self.niterations], numpy.float64)
+        self.u_n = numpy.zeros([self.niterations], numpy.float64)
         for iteration in range(self.niterations):
-            u_n[iteration] = numpy.sum(numpy.diagonal(u_kln[:,:,iteration]))
-        self.u_kln = u_kln[:,:,ndiscard:]
-        self.u_n = u_n[ndiscard:]
+            self.u_n[iteration] = numpy.sum(numpy.diagonal(u_kln[:,:,iteration]))
 
-        # Truncate to number of specified conforamtions to use
+        # Truncate to number of specified conforamtions to use, not really used
         if (nuse):
             u_kln_replica = u_kln_replica[:,:,0:nuse]
             self.u_kln = self.u_kln[:,:,0:nuse]
             self.u_n = self.u_n[0:nuse]
 
-        # Subsample data to obtain uncorrelated samples
-        self.N_k = numpy.zeros(self.nstates, numpy.int32)
-        if self.manual_subsample:
-            indices = timeseries.subsampleCorrelatedData(self.u_n, g=self.g_t) # indices of uncorrelated samples
-        else:
-            indices = timeseries.subsampleCorrelatedData(self.u_n) # indices of uncorrelated samples
-        N = len(indices) # number of uncorrelated samples
-        self.N_k[:] = N      
-        #Original Line
-        #self.u_kln[:,:,0:N] = self.u_kln[:,:,indices]
-        #Modified line to discard corelated data, reduces memory and should not change result since the data past N is ignored by mbar
-        self.u_kln = self.u_kln[:,:,indices]
-        if self.verbose:
-            print "number of uncorrelated samples:"
-            print self.N_k
-            print ""
-        self.retained_iters = self.u_kln.shape[2]
-        self.retained_indices = indices
         #!!! Temporary fix
         self.u_kln_raw = u_kln
+        
+        #Subsample data
+        self._subsample_kln(u_kln)
+
         return
 
     def detect_coupled_bases(self, basis_list):
@@ -718,13 +790,17 @@ class ncdata:
         return
 
     def compute_mbar(self):
+        if 'method' in self.kwargs:
+            method=self.kwargs['method']
+        else: 
+            method='adaptive'
         if self.mbar_f_ki is not None:
-            self.mbar = MBAR(self.u_kln, self.N_k, verbose = self.verbose, method = 'adaptive', initial_f_k=self.mbar_f_ki)
+            self.mbar = MBAR(self.u_kln, self.N_k, verbose = self.verbose, method = method, initial_f_k=self.mbar_f_ki)
         else:
-            self.mbar = MBAR(self.u_kln, self.N_k, verbose = self.verbose, method = 'adaptive')
+            self.mbar = MBAR(self.u_kln, self.N_k, verbose = self.verbose, method = method)
         self.mbar_ready = True
 
-    def __init__(self, phase, source_directory, verbose=False, real_R_states = None, real_A_states = None, real_E_states = None, compute_mbar = False, alchemy_source = None, save_equil_data=False, save_prefix="", run_checks=False, nequil=None, manual_subsample=False, u_kln_input=None, temp_in=298, mbar_f_ki=None):
+    def __init__(self, phase, source_directory, verbose=False, real_R_states = None, real_A_states = None, real_E_states = None, compute_mbar = False, alchemy_source = None, save_equil_data=False, save_prefix="", run_checks=False, nequil=None, subsample_method='all', u_kln_input=None, temp_in=298, mbar_f_ki=None, **kwargs):
         self.phase = phase
         self.verbose = verbose
         if type(save_prefix) is not str: save_prefix = ""
@@ -742,8 +818,17 @@ class ncdata:
         if nequil is not None:
             nequil = int(nequil)
         self.nequil = nequil
-        self.manual_subsample = manual_subsample
+        #Subsample method:
+        ## 'all' - use a single timeseries to subsample each state uniformly, use for HREX data only
+        ## 'per-state' - subsample each state manually. 
+        if subsample_method != 'all' and subsample_method != 'per-state':
+            print "Invalid subsample method, defaulting to 'all'"
+            subsample_method = 'all'
+        self.subsample_method = subsample_method
+        #self.manual_subsample = manual_subsample
         self.mbar_f_ki=mbar_f_ki
+        self.kwargs = kwargs
+        self.source_directory = source_directory
 
         if u_kln_input is not None:
             self.u_kln_raw = u_kln_input 
@@ -762,11 +847,11 @@ class ncdata:
             raw_input = True
         else:
             #Import file and grab the constants
-            fullpath = os.path.join(source_directory, save_prefix + phase + '.nc')
+            fullpath = os.path.join(self.source_directory, save_prefix + phase + '.nc')
             if (not os.path.exists(fullpath)): #Check for path
                 print save_prefix + phase + ' file does not exsist!'
                 print 'Checking for stock ' + phase + '.nc file'
-                stockpath = os.path.join(source_directory, phase + '.nc')
+                stockpath = os.path.join(self.source_directory, phase + '.nc')
                 if not os.path.exists(stockpath):
                     print 'No NC file found for ' + phase + ' phase!'
                     sys.exit(1)
@@ -803,35 +888,16 @@ class ncdata:
             self.kcalmol = (self.kT / units.kilocalories_per_mole)
 
             # Choose number of samples to discard to equilibration
-            u_n = self._extract_u_n(self.ncfile, verbose=self.verbose)
+            self.u_n = self._extract_u_n(self.ncfile, verbose=self.verbose)
             raw_input = False
 
-        if save_equil_data: #Check if we want to save/load equilibration data
-            try:
-                equil_data = numpy.load(os.path.join(source_directory, self.save_prefix + self.phase + '_equil_data.npz'))
-                if self.nequil is None:
-                    self.nequil = equil_data['nequil']
-                self.g_t = equil_data['g_t']
-                Neff_max = equil_data['Neff_max']
-                equil_loaded = True
-            except:
-                if self.nequil is None:
-                    [self.nequil, g_t, Neff_max] = self._detect_equilibration(u_n)
-                else:
-                    [self.nequil_timeseries, g_t, Neff_max] = self._detect_equilibration(u_n)
-                equil_loaded = False
-            if not equil_loaded:
-                numpy.savez(os.path.join(source_directory, self.save_prefix + self.phase + '_equil_data.npz'), nequil=self.nequil, g_t=g_t, Neff_max=Neff_max)
-        elif self.nequil is None:
-            [self.nequil, g_t, Neff_max] = self._detect_equilibration(u_n)
-
-        if self.verbose: print [self.nequil, Neff_max]
+        self.save_equil_data = save_equil_data
         self._build_u_kln(raw_input = raw_input)
         # Read reference PDB file.
         if self.phase in ['vacuum', 'solvent']:
-            self.reference_pdb_filename = os.path.join(source_directory, "ligand.pdb")
+            self.reference_pdb_filename = os.path.join(self.source_directory, "ligand.pdb")
         else:
-            self.reference_pdb_filename = os.path.join(source_directory, "complex.pdb")
+            self.reference_pdb_filename = os.path.join(self.source_directory, "complex.pdb")
         self.atoms = self._read_pdb(self.reference_pdb_filename)
 
         if compute_mbar:
