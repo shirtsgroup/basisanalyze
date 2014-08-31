@@ -547,6 +547,7 @@ class ncdata:
                 Neff_max = numpy.zeros([self.nstates])
                 for k in xrange(self.nstates):
                     [self.nequil[k], self.g_t[k], Neff_max[k]] = self._detect_equilibration(u_kln[k,k,:])
+                    if self.verbose: print "State %i equilibrated with %i samples" % (k, int(Neff_max[k]))
             else:
                 [self.nequil, self.g_t, Neff_max] = self._detect_equilibration(self.u_n)
 
@@ -795,9 +796,9 @@ class ncdata:
         else: 
             method='adaptive'
         if self.mbar_f_ki is not None:
-            self.mbar = MBAR(self.u_kln, self.N_k, verbose = self.verbose, method = method, initial_f_k=self.mbar_f_ki)
+            self.mbar = MBAR(self.u_kln, self.N_k, verbose = self.verbose, method = method, initial_f_k=self.mbar_f_ki, subsampling_protocol=[{'method':'L-BFGS-B','options':{'disp':self.verbose}}], subsampling=1)
         else:
-            self.mbar = MBAR(self.u_kln, self.N_k, verbose = self.verbose, method = method)
+            self.mbar = MBAR(self.u_kln, self.N_k, verbose = self.verbose, method = method, subsampling_protocol=[{'method':'L-BFGS-B','options':{'disp':self.verbose}}], subsampling=1)
         self.mbar_ready = True
 
     def __init__(self, phase, source_directory, verbose=False, real_R_states = None, real_A_states = None, real_E_states = None, compute_mbar = False, alchemy_source = None, save_equil_data=False, save_prefix="", run_checks=False, nequil=None, subsample_method='all', u_kln_input=None, temp_in=298, mbar_f_ki=None, **kwargs):
