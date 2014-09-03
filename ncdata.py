@@ -588,6 +588,30 @@ class ncdata:
         self.retained_iters = self.N_k
         return
 
+    def determine_N_k(self, series):
+        npoints = len(series)
+        #Go backwards to speed up process
+        N_k = npoints
+        for i in xrange(npoints,0,-1):
+            if not numpy.allclose(series[N_k-1:], numpy.zeros(len(series[N_k-1:]))):
+                break
+            else:
+                N_k += -1
+        return N_k
+
+    def _presubsampled(self, u_kln):
+        #Assume the u_kln is already subsampled
+        self.N_k = numpy.zeros(self.nstates, dtype=numpy.int32)
+        for k in xrange(self.nstates):
+            self.N_k[k] = self.determine_N_k(u_kln[k,k,:])
+        maxn = self.N_k.max()
+        self.retained_indices = numpy.zeros([self.nstates, maxn])
+        for k in xrange(self.nstates):
+            self.retained_indices[k,:self.N_k[k]] = numpy.array(range(self.N_k[k]))
+        self.u_kln = u_kln
+        self.retained_iters = self.N_k
+        return
+
     def _build_u_kln(self, nuse = None, raw_input=False):
         if not raw_input:
             # Extract energies.
@@ -625,7 +649,10 @@ class ncdata:
         self.u_kln_raw = u_kln
         
         #Subsample data
-        self._subsample_kln(u_kln)
+        if self.subsample_method is 'presubsampled':
+            self._presubsampled(u_kln)
+        else:
+            self._subsample_kln(u_kln)
 
         return
 
@@ -822,8 +849,9 @@ class ncdata:
         #Subsample method:
         ## 'all' - use a single timeseries to subsample each state uniformly, use for HREX data only
         ## 'per-state' - subsample each state manually. 
-        if subsample_method != 'all' and subsample_method != 'per-state':
-            print "Invalid subsample method, defaulting to 'all'"
+        valid_subsamples = ['all', 'per-state', 'presubsampled']
+        if subsample_method not in valid_subsamples:
+            print "Invalid subsample method '%s', defaulting to 'all'" % subsample_method
             subsample_method = 'all'
         self.subsample_method = subsample_method
         #self.manual_subsample = manual_subsample
