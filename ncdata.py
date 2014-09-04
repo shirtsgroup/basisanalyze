@@ -575,6 +575,7 @@ class ncdata:
 
             #Cut down on memory, once function is done, transfer_kln should be released
             self.u_kln = transfer_kln
+            self.retained_iters = self.N_k
         else:
             #Discard Samples
             self.u_kln = u_kln[:,:,self.nequil:]
@@ -584,8 +585,7 @@ class ncdata:
             self.u_kln = self.u_kln[:,:,indices]
             self.N_k[:] = len(indices)
             self.retained_indices = indices
-
-        self.retained_iters = self.N_k
+            self.retained_iters = len(indices)
         return
 
     def determine_N_k(self, series):
