@@ -478,6 +478,7 @@ class ncdata:
         Neff_max (float) - number of uncorrelated samples   
         
         """
+        from sys import stdout
         T = A_t.size
     
         # Special case if timeseries is constant.
@@ -487,9 +488,12 @@ class ncdata:
         g_t = numpy.ones([T-1], numpy.float32)
         Neff_t = numpy.ones([T-1], numpy.float32)
         for t in range(T-1):
+            if self.verbose:
+                stdout.flush()
+                stdout.write('\rTesting Equilibration: %i/%i' % (t,T-2))
             g_t[t] = timeseries.statisticalInefficiency(A_t[t:T])
             Neff_t[t] = (T-t+1) / g_t[t]
-        
+        if self.verbose: stdout.write('\n')
         Neff_max = Neff_t.max()
         t = Neff_t.argmax()
         g = g_t[t]

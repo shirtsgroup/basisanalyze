@@ -117,27 +117,11 @@ class BasisVariance:
             else:
                 return
 
-    def buildExpected_master(self, nc, extra_lam, sequence, verbose=None, bootstrap=False, basis_derivatives=None, single_stage=None, fragment_kln=False, stage_ranges=None):
-        """
-        This particular bit of coding will be reworked in this branch to make sure that all of the possible scheudles can be handled in a general maner with minimal user input.
-        Unfortunatley, this will require reading in both the alchemy file and user input information.
-        I have removed the perturbed expected from this since it is no longer used
-        """
-        if verbose is None:
-            verbose=self.default_verbosity
-        if basis_derivatives is None:
-            basis_derivatives = self.basis
-        #Validate the sequence
+    def genConsts(self, nc, sequence, derU=False):
+        #Given a sequence, automatically pass in the correct const matricies
+        #This is a quality of life function.
         self.checkSequence(seq=sequence)
-        valid_seqs = self.checkSequence()
-        nstage = len(sequence)
-        if len(extra_lam) != nstage:
-            print "Incorrect number of extra_lam arguments. There must be at least one item per stage, even if its an empty object"
-            sys.exit(1)
-        #Compute the constant matricies
-        #Start with alloff
-        if verbose: print "Generating constant matricies..."
-        const_U_matrix = nc.u_kln[:,nc.real_alloff,:]
+        checkSequence(seq=sequence)
         #Compute PME
         if nc.real_PCAR is not None: #Trap when A is decoupled first
             noEstate = nc.real_CAR
@@ -156,64 +140,102 @@ class BasisVariance:
         const_Psq_matrix = (PMELess/hless - PMEFull/hfull) / (hless-hfull)
         const_P_matrix = PMEFull/hfull - hfull*const_Psq_matrix
         #Compute the rest of the basis based on sequence
+        if derU is True:
+            #Set the functions of the derivatives if the derivatives are requested
+            f_e = lambda lam: self.basis.dh_e(lam)
+            f_psq = lambda lam: 2*self.basis.h_e(lam)*self.basis.dh_e(lam)
+            f_r = lambda lam: self.basis.dh_r(lam)
+            f_a = lambda lam: self.basis.dh_a(lam)
+            f_c = lambda lam: 1
+            un_factor = 0
+        else:
+            #Use normal calculations
+            f_e = lambda lam: self.basis.h_e(lam)
+            f_psq = lambda lam: self.basis.h_e(lam)**2
+            f_r = lambda lam: self.basis.h_r(lam)
+            f_a = lambda lam: self.basis.h_a(lam)
+            f_c = lambda lam: lam
+            un_factor = 1
         if sequence == valid_seqs[0]: #ep c ar
             const_R_matrix, const_A_matrix, const_C_matrix, const_E_matrix = self.Ugen_EP_C_AR(nc)
             #Assign energy evaluation stages
             Ustage = [
-                lambda lam: self.basis.h_e(lam)*const_E_matrix + \
-                            (self.basis.h_e(lam)**2)*const_Psq_matrix + \
-                            self.basis.h_e(lam)*const_P_matrix + \
-                            nc.u_kln[:,nc.real_CAR,:],
-                lambda lam: lam * const_C_matrix + \
-                            nc.u_kln[:,nc.real_AR,:],
-                lambda lam: self.basis.h_r(lam)*const_R_matrix + \
-                            self.basis.h_a(lam)*const_A_matrix + \
-                            nc.u_kln[:,nc.real_alloff,:]
+                lambda lam: f_e(lam)*const_E_matrix + \
+                            f_p(sqlam)*const_Psq_matrix + \
+                            f_e(lam)*const_P_matrix + \
+                            un_factor*nc.u_kln[:,nc.real_CAR,:],
+                lambda lam: f_c(lam) * const_C_matrix + \
+                            un_factor*nc.u_kln[:,nc.real_AR,:],
+                lambda lam: f_r(lam)*const_R_matrix + \
+                            f_a(lam)*const_A_matrix + \
+                            un_factor*nc.u_kln[:,nc.real_alloff,:]
                      ]
         elif sequence == valid_seqs[1]: #epa, c, r
             const_R_matrix, const_A_matrix, const_C_matrix, const_E_matrix = self.Ugen_EPA_C_R(nc)
             Ustage = [
-                lambda lam: self.basis.h_e(lam)*const_E_matrix + \
-                            (self.basis.h_e(lam)**2)*const_Psq_matrix + \
-                            self.basis.h_e(lam)*const_P_matrix + \
-                            self.basis.h_a(lam)*const_A_matrix + \
-                            nc.u_kln[:,nc.real_CR,:],
-                lambda lam: lam * const_C_matrix + \
-                            nc.u_kln[:,nc.real_R,:],
-                lambda lam: self.basis.h_r(lam)*const_R_matrix + \
-                            nc.u_kln[:,nc.real_alloff,:]
+                lambda lam: f_e(lam)*const_E_matrix + \
+                            f_psq(lam)*const_Psq_matrix + \
+                            f_e(lam)*const_P_matrix + \
+                            f_a(lam)*const_A_matrix + \
+                            un_factor*nc.u_kln[:,nc.real_CR,:],
+                lambda lam: f_c(lam) * const_C_matrix + \
+                            un_factor * nc.u_kln[:,nc.real_R,:],
+                lambda lam: f_r(lam)*const_R_matrix + \
+                            un_factor*nc.u_kln[:,nc.real_alloff,:]
                      ]
         elif sequence == valid_seqs[2]: #ep, a, c, r
             const_R_matrix, const_A_matrix, const_C_matrix, const_E_matrix = self.Ugen_EP_A_C_R(nc)
             Ustage = [
-                lambda lam: self.basis.h_e(lam)*const_E_matrix + \
-                            (self.basis.h_e(lam)**2)*const_Psq_matrix + \
-                            self.basis.h_e(lam)*const_P_matrix + \
-                            nc.u_kln[:,nc.real_CAR,:],
-                lambda lam: self.basis.h_a(lam)*const_A_matrix + \
-                            nc.u_kln[:,nc.real_CR,:],
-                lambda lam: lam * const_C_matrix + \
-                            nc.u_kln[:,nc.real_R,:],
-                lambda lam: self.basis.h_r(lam)*const_R_matrix + \
-                            nc.u_kln[:,nc.real_alloff,:]
+                lambda lam: f_e(lam)*const_E_matrix + \
+                            f_psq(lam)*const_Psq_matrix + \
+                            f_e(lam)*const_P_matrix + \
+                            un_factor*nc.u_kln[:,nc.real_CAR,:],
+                lambda lam: f_a(lam)*const_A_matrix + \
+                            un_factor*nc.u_kln[:,nc.real_CR,:],
+                lambda lam: f_c(lam) * const_C_matrix + \
+                            un_factor*nc.u_kln[:,nc.real_R,:],
+                lambda lam: f_r(lam)*const_R_matrix + \
+                            un_factor*nc.u_kln[:,nc.real_alloff,:]
                      ]
         elif sequence == valid_seqs[3]: #a, ep, c, r
             const_R_matrix, const_A_matrix, const_C_matrix, const_E_matrix = self.Ugen_A_EP_C_R(nc)
             Ustage = [
-                lambda lam: self.basis.h_a(lam)*const_A_matrix + \
-                            nc.u_kln[:,nc.real_EPCR,:],
-                lambda lam: self.basis.h_e(lam)*const_E_matrix + \
-                            (self.basis.h_e(lam)**2)*const_Psq_matrix + \
-                            self.basis.h_e(lam)*const_P_matrix + \
-                            nc.u_kln[:,nc.real_CR,:],
-                lambda lam: lam * const_C_matrix + \
-                            nc.u_kln[:,nc.real_R,:],
-                lambda lam: self.basis.h_r(lam)*const_R_matrix + \
-                            nc.u_kln[:,nc.real_alloff,:]
+                lambda lam: f_a(lam)*const_A_matrix + \
+                            un_factor*nc.u_kln[:,nc.real_EPCR,:],
+                lambda lam: f_e(lam)*const_E_matrix + \
+                            f_psq(lam)*const_Psq_matrix + \
+                            f_e(lam)*const_P_matrix + \
+                            un_factor*nc.u_kln[:,nc.real_CR,:],
+                lambda lam: f_c(lam) * const_C_matrix + \
+                            un_factor*nc.u_kln[:,nc.real_R,:],
+                lambda lam: f_r(lam)*const_R_matrix + \
+                            un_factor*nc.u_kln[:,nc.real_alloff,:]
                      ]
         else: #This sould not trip, added as safety
             print "How did you make it here?"
-            sys.exit(1) 
+            sys.exit(1)
+        return const_R_matrix, const_A_matrix, const_C_matrix, const_E_matrix, const_P_matrix, const_Psq_matrix, Ustage
+
+    def buildExpected_master(self, nc, extra_lam, sequence, verbose=None, bootstrap=False, basis_derivatives=None, single_stage=None, fragment_kln=False, stage_ranges=None):
+        """
+        This particular bit of coding will be reworked in this branch to make sure that all of the possible scheudles can be handled in a general maner with minimal user input.
+        Unfortunatley, this will require reading in both the alchemy file and user input information.
+        I have removed the perturbed expected from this since it is no longer used
+        """
+        if verbose is None:
+            verbose=self.default_verbosity
+        if basis_derivatives is None:
+            basis_derivatives = self.basis
+        #Validate the sequence
+        valid_seqs = self.checkSequence()
+        nstage = len(sequence)
+        if len(extra_lam) != nstage:
+            print "Incorrect number of extra_lam arguments. There must be at least one item per stage, even if its an empty object"
+            sys.exit(1)
+        #Compute the constant matricies
+        if verbose: print "Generating constant matricies..."
+        const_R_matrix, const_A_matrix, const_C_matrix, const_E_matrix, const_P_matrix, const_Psq_matrix, Ustage = self.genConsts(nc, sequence)
+ 
         #Compute the potential energies
         u_klns = {}
         N_ks = {}
