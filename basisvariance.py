@@ -80,29 +80,45 @@ class BasisVariance:
             lam_out.reverse_order()
         return all_ndx_sorted[::-1]
 
-    def Ugen_EP_C_AR(self, nc):
-        const_R_matrix = nc.u_kln[:,nc.real_R,:] - nc.u_kln[:,nc.real_alloff,:]
-        const_A_matrix = nc.u_kln[:,nc.real_AR,:] - nc.u_kln[:,nc.real_R,:]
-        const_C_matrix = nc.u_kln[:,nc.real_CAR,:] - nc.u_kln[:,nc.real_AR,:]
-        const_E_matrix = nc.u_kln[:,nc.real_EPCAR,:] - nc.u_kln[:,nc.real_PCAR,:]
+    def Ugen_EP_C_AR(self, nc, raw=False):
+        if raw:
+            u_kln = nc.u_kln_raw
+        else:
+            u_kln = nc.u_kln
+        const_R_matrix = u_kln[:,nc.real_R,:] - u_kln[:,nc.real_alloff,:]
+        const_A_matrix = u_kln[:,nc.real_AR,:] - u_kln[:,nc.real_R,:]
+        const_C_matrix = u_kln[:,nc.real_CAR,:] - u_kln[:,nc.real_AR,:]
+        const_E_matrix = u_kln[:,nc.real_EPCAR,:] - u_kln[:,nc.real_PCAR,:]
         return const_R_matrix, const_A_matrix, const_C_matrix, const_E_matrix
-    def Ugen_EPA_C_R(self, nc):
-        const_R_matrix = nc.u_kln[:,nc.real_R,:] - nc.u_kln[:,nc.real_alloff,:]
-        const_C_matrix = nc.u_kln[:,nc.real_CR,:] - nc.u_kln[:,nc.real_R,:]
-        const_A_matrix = nc.u_kln[:,nc.real_CAR,:] - nc.u_kln[:,nc.real_CR,:]
-        const_E_matrix = nc.u_kln[:,nc.real_EPCAR,:] - nc.u_kln[:,nc.real_PCAR,:]
+    def Ugen_EPA_C_R(self, nc, raw=False):
+        if raw:
+            u_kln = nc.u_kln_raw
+        else:
+            u_kln = nc.u_kln
+        const_R_matrix = u_kln[:,nc.real_R,:] - u_kln[:,nc.real_alloff,:]
+        const_C_matrix = u_kln[:,nc.real_CR,:] - u_kln[:,nc.real_R,:]
+        const_A_matrix = u_kln[:,nc.real_CAR,:] - u_kln[:,nc.real_CR,:]
+        const_E_matrix = u_kln[:,nc.real_EPCAR,:] - u_kln[:,nc.real_PCAR,:]
         return const_R_matrix, const_A_matrix, const_C_matrix, const_E_matrix
-    def Ugen_EP_A_C_R(self, nc):
-        const_R_matrix = nc.u_kln[:,nc.real_R,:] - nc.u_kln[:,nc.real_alloff,:]
-        const_C_matrix = nc.u_kln[:,nc.real_CR,:] - nc.u_kln[:,nc.real_R,:]
-        const_A_matrix = nc.u_kln[:,nc.real_CAR,:] - nc.u_kln[:,nc.real_CR,:]
-        const_E_matrix = nc.u_kln[:,nc.real_EPCAR,:] - nc.u_kln[:,nc.real_PCAR,:]
+    def Ugen_EP_A_C_R(self, nc, raw=False):
+        if raw:
+            u_kln = nc.u_kln_raw
+        else:
+            u_kln = nc.u_kln
+        const_R_matrix = u_kln[:,nc.real_R,:] - u_kln[:,nc.real_alloff,:]
+        const_C_matrix = u_kln[:,nc.real_CR,:] - u_kln[:,nc.real_R,:]
+        const_A_matrix = u_kln[:,nc.real_CAR,:] - u_kln[:,nc.real_CR,:]
+        const_E_matrix = u_kln[:,nc.real_EPCAR,:] - u_kln[:,nc.real_PCAR,:]
         return const_R_matrix, const_A_matrix, const_C_matrix, const_E_matrix
-    def Ugen_A_EP_C_R(self, nc):
-        const_R_matrix = nc.u_kln[:,nc.real_R,:] - nc.u_kln[:,nc.real_alloff,:]
-        const_C_matrix = nc.u_kln[:,nc.real_CR,:] - nc.u_kln[:,nc.real_R,:]
-        const_E_matrix = nc.u_kln[:,nc.real_EPCR,:] - nc.u_kln[:,nc.real_PCR,:]
-        const_A_matrix = nc.u_kln[:,nc.real_EPCAR,:] - nc.u_kln[:,nc.real_EPCR,:]
+    def Ugen_A_EP_C_R(self, nc, raw=False):
+        if raw:
+            u_kln = nc.u_kln_raw
+        else:
+            u_kln = nc.u_kln
+        const_R_matrix = u_kln[:,nc.real_R,:] - u_kln[:,nc.real_alloff,:]
+        const_C_matrix = u_kln[:,nc.real_CR,:] - u_kln[:,nc.real_R,:]
+        const_E_matrix = u_kln[:,nc.real_EPCR,:] - u_kln[:,nc.real_PCR,:]
+        const_A_matrix = u_kln[:,nc.real_EPCAR,:] - u_kln[:,nc.real_EPCR,:]
         return const_R_matrix, const_A_matrix, const_C_matrix, const_E_matrix
 
     def checkSequence(self, seq=None):
@@ -117,12 +133,16 @@ class BasisVariance:
             else:
                 return
 
-    def genConsts(self, nc, sequence, derU=False):
+    def genConsts(self, nc, sequence, derU=False, raw=False):
         #Given a sequence, automatically pass in the correct const matricies
         #This is a quality of life function.
         self.checkSequence(seq=sequence)
-        checkSequence(seq=sequence)
+        valid_seqs = self.checkSequence()
         #Compute PME
+        if raw:
+            u_kln=nc.u_kln_raw
+        else:
+            u_kln=nc.u_kln
         if nc.real_PCAR is not None: #Trap when A is decoupled first
             noEstate = nc.real_CAR
             Pstate = nc.real_PCAR
@@ -131,8 +151,8 @@ class BasisVariance:
             noEstate = nc.real_CR
             Pstate = nc.real_PCR
             Psolve = nc.real_Psolve2
-        PMEFull = nc.u_kln[:,Pstate,:] - nc.u_kln[:,noEstate,:]
-        PMELess = nc.u_kln[:,Psolve,:] - nc.u_kln[:,noEstate,:]
+        PMEFull = u_kln[:,Pstate,:] - u_kln[:,noEstate,:]
+        PMELess = u_kln[:,Psolve,:] - u_kln[:,noEstate,:]
         LamAtFull = nc.real_PMEFull_states[Pstate]
         LamAtLess = nc.real_PMEFull_states[Psolve]
         hless = self.basis.h_e(LamAtLess)
@@ -157,59 +177,59 @@ class BasisVariance:
             f_c = lambda lam: lam
             un_factor = 1
         if sequence == valid_seqs[0]: #ep c ar
-            const_R_matrix, const_A_matrix, const_C_matrix, const_E_matrix = self.Ugen_EP_C_AR(nc)
+            const_R_matrix, const_A_matrix, const_C_matrix, const_E_matrix = self.Ugen_EP_C_AR(nc, raw=raw)
             #Assign energy evaluation stages
             Ustage = [
                 lambda lam: f_e(lam)*const_E_matrix + \
-                            f_p(sqlam)*const_Psq_matrix + \
+                            f_psq(lam)*const_Psq_matrix + \
                             f_e(lam)*const_P_matrix + \
-                            un_factor*nc.u_kln[:,nc.real_CAR,:],
+                            un_factor*u_kln[:,nc.real_CAR,:],
                 lambda lam: f_c(lam) * const_C_matrix + \
-                            un_factor*nc.u_kln[:,nc.real_AR,:],
+                            un_factor*u_kln[:,nc.real_AR,:],
                 lambda lam: f_r(lam)*const_R_matrix + \
                             f_a(lam)*const_A_matrix + \
-                            un_factor*nc.u_kln[:,nc.real_alloff,:]
+                            un_factor*u_kln[:,nc.real_alloff,:]
                      ]
         elif sequence == valid_seqs[1]: #epa, c, r
-            const_R_matrix, const_A_matrix, const_C_matrix, const_E_matrix = self.Ugen_EPA_C_R(nc)
+            const_R_matrix, const_A_matrix, const_C_matrix, const_E_matrix = self.Ugen_EPA_C_R(nc, raw=raw)
             Ustage = [
                 lambda lam: f_e(lam)*const_E_matrix + \
                             f_psq(lam)*const_Psq_matrix + \
                             f_e(lam)*const_P_matrix + \
                             f_a(lam)*const_A_matrix + \
-                            un_factor*nc.u_kln[:,nc.real_CR,:],
+                            un_factor*u_kln[:,nc.real_CR,:],
                 lambda lam: f_c(lam) * const_C_matrix + \
-                            un_factor * nc.u_kln[:,nc.real_R,:],
+                            un_factor * u_kln[:,nc.real_R,:],
                 lambda lam: f_r(lam)*const_R_matrix + \
-                            un_factor*nc.u_kln[:,nc.real_alloff,:]
+                            un_factor*u_kln[:,nc.real_alloff,:]
                      ]
         elif sequence == valid_seqs[2]: #ep, a, c, r
-            const_R_matrix, const_A_matrix, const_C_matrix, const_E_matrix = self.Ugen_EP_A_C_R(nc)
+            const_R_matrix, const_A_matrix, const_C_matrix, const_E_matrix = self.Ugen_EP_A_C_R(nc, raw=raw)
             Ustage = [
                 lambda lam: f_e(lam)*const_E_matrix + \
                             f_psq(lam)*const_Psq_matrix + \
                             f_e(lam)*const_P_matrix + \
-                            un_factor*nc.u_kln[:,nc.real_CAR,:],
+                            un_factor*u_kln[:,nc.real_CAR,:],
                 lambda lam: f_a(lam)*const_A_matrix + \
-                            un_factor*nc.u_kln[:,nc.real_CR,:],
+                            un_factor*u_kln[:,nc.real_CR,:],
                 lambda lam: f_c(lam) * const_C_matrix + \
-                            un_factor*nc.u_kln[:,nc.real_R,:],
+                            un_factor*u_kln[:,nc.real_R,:],
                 lambda lam: f_r(lam)*const_R_matrix + \
-                            un_factor*nc.u_kln[:,nc.real_alloff,:]
+                            un_factor*u_kln[:,nc.real_alloff,:]
                      ]
         elif sequence == valid_seqs[3]: #a, ep, c, r
-            const_R_matrix, const_A_matrix, const_C_matrix, const_E_matrix = self.Ugen_A_EP_C_R(nc)
+            const_R_matrix, const_A_matrix, const_C_matrix, const_E_matrix = self.Ugen_A_EP_C_R(nc, raw=raw)
             Ustage = [
                 lambda lam: f_a(lam)*const_A_matrix + \
-                            un_factor*nc.u_kln[:,nc.real_EPCR,:],
+                            un_factor*u_kln[:,nc.real_EPCR,:],
                 lambda lam: f_e(lam)*const_E_matrix + \
                             f_psq(lam)*const_Psq_matrix + \
                             f_e(lam)*const_P_matrix + \
-                            un_factor*nc.u_kln[:,nc.real_CR,:],
+                            un_factor*u_kln[:,nc.real_CR,:],
                 lambda lam: f_c(lam) * const_C_matrix + \
-                            un_factor*nc.u_kln[:,nc.real_R,:],
+                            un_factor*u_kln[:,nc.real_R,:],
                 lambda lam: f_r(lam)*const_R_matrix + \
-                            un_factor*nc.u_kln[:,nc.real_alloff,:]
+                            un_factor*u_kln[:,nc.real_alloff,:]
                      ]
         else: #This sould not trip, added as safety
             print "How did you make it here?"
