@@ -601,9 +601,9 @@ class BasisVariance:
                     for stage in sequence:
                         for key in boot_expect[stage]['sorting_items']:
                             boot_expect[stage][key] = boot_expect[stage][key][sorted_ndxs[stage]]
-                        boot_integrand_holder, boot_variance_junk = self.calcvar_master(expectations[stage], self.lam_range, return_error=False)
+                        boot_integrand_holder, boot_variance_junk = self.calcvar_master(boot_expect[stage], self.lam_range, return_error=False)
                         if calculatedhdl:
-                            boot_dhdl_holder = self.calcdhdl_master(expectations[stage], self.lam_range, return_error=False)
+                            boot_dhdl_holder = self.calcdhdl_master(boot_expect[stage], self.lam_range, return_error=False)
                             bootstrap_dhdl[stage][:,i] = boot_dhdl_holder['natural']
                         bootstrap_integrands[stage][:,i] = boot_integrand_holder['natural']
                 #Determine bootstrap error
